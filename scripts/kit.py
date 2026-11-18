@@ -75,9 +75,14 @@ def merge_section(claude_md, section):
         claude_md.write_text(block + "\n", encoding="utf-8")
         return
     old = claude_md.read_text(encoding="utf-8")
-    b = old.find(BEGIN)
-    e = old.find(END, b + len(BEGIN)) if b != -1 else -1
-    if b != -1 and e != -1:
+    nb, ne = old.count(BEGIN), old.count(END)
+    b, e = old.find(BEGIN), old.find(END)
+    if not ((nb == 0 and ne == 0) or (nb == 1 and ne == 1 and b < e)):
+        raise SystemExit(
+            "Your ~/.claude/CLAUDE.md has a broken vault-starter section "
+            "(a begin or end marker is missing or doubled). "
+            "Fix the markers, then run setup again.")
+    if nb == 1:
         new = old[:b] + block + old[e + len(END):]
     else:
         sep = "" if not old else ("\n" if old.endswith("\n") else "\n\n")
@@ -97,9 +102,12 @@ def link_memory(vault):
     link = Path.home() / ".claude" / "projects" / encode_project_dir(vault) / "memory"
     link.parent.mkdir(parents=True, exist_ok=True)
     if link.is_symlink():
-        if os.path.abspath(os.readlink(link)) == str(target):
+        if os.path.realpath(link) == os.path.realpath(target):
             return
-        link.unlink()
+        raise SystemExit(
+            "vault-starter: %s already points to %s, not to %s. "
+            "Not changing it, so nothing is lost. Move or remove it yourself, then run setup again."
+            % (link, os.path.realpath(link), os.path.realpath(target)))
     elif link.is_dir():
         for item in sorted(link.iterdir()):
             dest = target / item.name

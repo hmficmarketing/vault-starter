@@ -162,9 +162,55 @@ test_encode_project_dir() {
   assert_eq "$(python3 -I "$KIT" encode "/Users/a/My Vault")" "-Users-a-My-Vault" "encode"
 }
 
+test_broken_markers_refused() {
+  local variant content
+  for variant in orphan_begin orphan_end reversed; do
+    local h; h="$(fake_home)"
+    mkdir -p "$h/.claude"
+    case "$variant" in
+      orphan_begin) content="TOP\n$MB\nold kit\nUSER TEXT KEEP\n" ;;
+      orphan_end) content="TOP\nold kit\n$ME\nUSER TEXT KEEP\n" ;;
+      reversed) content="TOP\n$ME\nmid\n$MB\nUSER TEXT KEEP\n" ;;
+    esac
+    printf "$content" > "$h/.claude/CLAUDE.md"
+    cp "$h/.claude/CLAUDE.md" "$h/orig"
+    if run_install "$h" --vault "$h/Vault" --name Sam --apps "alpha"; then _fail "$variant: install should fail"; else _pass; fi
+    if cmp -s "$h/orig" "$h/.claude/CLAUDE.md"; then _pass; else _fail "$variant: file changed"; fi
+    assert_eq "$(ls "$h/.claude" | grep -c 'bak-vault-starter' || true)" "0" "$variant: no backup"
+    assert_contains "$h/install.out" "broken vault-starter section"
+    rm -rf "$h"
+  done
+}
+
+test_memory_symlink_elsewhere_refused() {
+  local h; h="$(fake_home)"
+  local v="$h/Vault"
+  local enc; enc="$(python3 -I "$KIT" encode "$v")"
+  mkdir -p "$h/other" "$h/.claude/projects/$enc"
+  printf 'keep\n' > "$h/other/x.md"
+  ln -s "$h/other" "$h/.claude/projects/$enc/memory"
+  if run_install "$h" --vault "$v" --name Sam --apps "alpha"; then _fail "should refuse"; else _pass; fi
+  assert_eq "$(readlink "$h/.claude/projects/$enc/memory")" "$h/other" "link unchanged"
+  assert_contains "$h/other/x.md" "keep"
+  assert_contains "$h/install.out" "$h/other"
+  rm -rf "$h"
+}
+
+test_memory_relative_symlink_accepted() {
+  local h; h="$(fake_home)"
+  local v="$h/Vault"
+  local enc; enc="$(python3 -I "$KIT" encode "$v")"
+  mkdir -p "$v/.claude/memory" "$h/.claude/projects/$enc"
+  (cd "$h/.claude/projects/$enc" && ln -s "../../../Vault/.claude/memory" memory)
+  if run_install "$h" --vault "$v" --name Sam --apps "alpha"; then _pass; else _fail "relative link refused"; fi
+  assert_eq "$(readlink "$h/.claude/projects/$enc/memory")" "../../../Vault/.claude/memory" "link unchanged"
+  rm -rf "$h"
+}
+
 for t in test_fresh_install test_existing_claude_md_preserved test_text_outside_markers_untouched \
   test_run_twice_idempotent test_existing_vault_file_not_replaced test_existing_memory_moved_not_lost \
-  test_vault_path_with_spaces test_no_tiers test_answers_saved test_git_flag test_encode_project_dir; do
+  test_vault_path_with_spaces test_no_tiers test_answers_saved test_git_flag test_encode_project_dir \
+  test_broken_markers_refused test_memory_symlink_elsewhere_refused test_memory_relative_symlink_accepted; do
   echo " - $t"
   $t
 done
