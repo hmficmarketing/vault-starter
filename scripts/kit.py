@@ -240,6 +240,12 @@ def install_assets(kit, home):
                 shutil.copyfile(src, dest)
                 result["updated"].append(key)
                 manifest[key] = new_hash
+            elif manifest.get(key) == new_hash:
+                # Person edited it and the kit copy did not change: nothing new to offer.
+                stale = Path(key + ".kit-new")
+                if stale.exists():
+                    stale.unlink()
+                continue
             else:
                 shutil.copyfile(src, key + ".kit-new")
                 result["kept_user_edit"].append(key)
@@ -326,15 +332,23 @@ def install(args):
     link_memory(vault)
     write_router(home / "Code", apps, template=kit / "template" / "code-router" / "CLAUDE.md", values=values)
 
+    ans = home / ".claude" / "vault-starter" / "answers.json"
+    if args.privacy is None:
+        try:
+            prev = json.loads(ans.read_text(encoding="utf-8")).get("privacy", [])
+            privacy = prev if isinstance(prev, list) else []
+        except Exception:
+            privacy = []
+    else:
+        privacy = [p.strip() for p in args.privacy.split(";") if p.strip()]
     answers = {
         "name": args.name,
         "vault": str(vault),
         "apps": apps,
-        "privacy": [p.strip() for p in (args.privacy or "").split(";") if p.strip()],
+        "privacy": privacy,
         "no_tiers": bool(args.no_tiers),
         "git": bool(args.git),
     }
-    ans = home / ".claude" / "vault-starter" / "answers.json"
     ans.parent.mkdir(parents=True, exist_ok=True)
     ans.write_text(json.dumps(answers, indent=2) + "\n", encoding="utf-8")
 
@@ -342,7 +356,8 @@ def install(args):
         git_init(vault, args.name)
 
     res = install_assets(kit, home)
-    write_privacy(answers["privacy"])
+    if args.privacy is not None or not (home / ".claude" / "vault-starter" / "privacy-folders.txt").exists():
+        write_privacy(privacy)
     register_hooks(home / ".claude" / "settings.json",
                    [home / ".claude" / "hooks" / "kit-home-scope-guard.sh",
                     home / ".claude" / "hooks" / "kit-privacy-guard.sh"])
@@ -359,7 +374,7 @@ def main(argv=None):
     i.add_argument("--vault", required=True)
     i.add_argument("--name", required=True)
     i.add_argument("--apps", default="")
-    i.add_argument("--privacy", default="")
+    i.add_argument("--privacy", default=None)
     i.add_argument("--no-tiers", action="store_true")
     i.add_argument("--git", action="store_true")
     i.add_argument("--kit-dir", default=str(Path(__file__).resolve().parent.parent))

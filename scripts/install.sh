@@ -5,13 +5,13 @@ set -e
 SRC="$(cd "$(dirname "$0")/.." && pwd -P)"
 DEST="$HOME/.claude/vault-starter"
 
-VAULT="$HOME/Vault"; NAME=""; APPS=""; PRIVACY=""; NO_TIERS=""; GIT=""
+VAULT="$HOME/Vault"; NAME=""; APPS=""; PRIVACY=""; PRIVACY_SET=""; NO_TIERS=""; GIT=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --vault) VAULT="$2"; shift 2 ;;
     --name) NAME="$2"; shift 2 ;;
     --apps) APPS="$2"; shift 2 ;;
-    --privacy) PRIVACY="$2"; shift 2 ;;
+    --privacy) PRIVACY="$2"; PRIVACY_SET=1; shift 2 ;;
     --no-tiers) NO_TIERS=1; shift ;;
     --git) GIT=1; shift ;;
     *) echo "vault-starter: unknown option: $1" >&2; exit 2 ;;
@@ -31,7 +31,8 @@ if [ "$SRC" != "$(cd "$DEST" && pwd -P)" ]; then
   done
 fi
 
-ARGS=(install --vault "$VAULT" --name "$NAME" --apps "$APPS" --privacy "$PRIVACY" --kit-dir "$DEST")
+ARGS=(install --vault "$VAULT" --name "$NAME" --apps "$APPS" --kit-dir "$DEST")
+[ -n "$PRIVACY_SET" ] && ARGS+=(--privacy "$PRIVACY")
 [ -n "$NO_TIERS" ] && ARGS+=(--no-tiers)
 [ -n "$GIT" ] && ARGS+=(--git)
 python3 -I -B "$DEST/scripts/kit.py" "${ARGS[@]}"

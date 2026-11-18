@@ -192,6 +192,39 @@ test_hook_fires_after_install() {
   rm -rf "$h"
 }
 
+test_edited_skill_unchanged_kit_silent() {
+  local h; h="$(fake_home)"
+  run_install "$h" --vault "$h/Vault" --name Sam --apps "alpha"
+  local d="$h/.claude/skills/kit-daily/SKILL.md"
+  printf 'MY EDIT\n' >> "$d"
+  run_install "$h" --vault "$h/Vault" --name Sam --apps "alpha"
+  assert_contains "$d" "MY EDIT"
+  if [ -e "$d.kit-new" ]; then _fail "unexpected .kit-new"; else _pass; fi
+  assert_not_contains "$h/install.out" "kit-new"
+  assert_not_contains "$h/install.out" "I kept your version"
+  # stale .kit-new from an earlier kit change is removed once the kit stops changing
+  printf 'old\n' > "$d.kit-new"
+  run_install "$h" --vault "$h/Vault" --name Sam --apps "alpha"
+  if [ -e "$d.kit-new" ]; then _fail "stale .kit-new kept"; else _pass; fi
+  rm -rf "$h"
+}
+
+test_privacy_kept_on_rerun() {
+  local h; h="$(fake_home)"
+  run_install "$h" --vault "$h/Vault" --name Sam --apps "alpha" --privacy "$h/Private"
+  run_install "$h" --vault "$h/Vault" --name Sam --apps "alpha"
+  assert_contains "$h/.claude/vault-starter/privacy-folders.txt" "$h/Private"
+  assert_contains "$h/.claude/vault-starter/answers.json" "$h/Private"
+  local rc=0
+  printf '{"tool_name":"Read","tool_input":{"file_path":"%s/Private/a.txt"}}' "$h" \
+    | HOME="$h" bash "$h/.claude/hooks/kit-privacy-guard.sh" >/dev/null 2>&1 || rc=$?
+  assert_eq "$rc" "2" "privacy hook still blocks"
+  run_install "$h" --vault "$h/Vault" --name Sam --apps "alpha" --privacy ""
+  assert_eq "$(wc -c < "$h/.claude/vault-starter/privacy-folders.txt" | tr -d ' ')" "0" "explicit empty clears"
+  assert_not_contains "$h/.claude/vault-starter/answers.json" "Private"
+  rm -rf "$h"
+}
+
 for t in $(declare -F | awk '{print $3}' | grep '^test_'); do
   echo "- $t"
   "$t"
