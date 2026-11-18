@@ -42,4 +42,32 @@ expect test_privacy_no_file_allows $P '{"tool_name":"Read","tool_input":{"file_p
 : > "$FAKE/.claude/vault-starter/privacy-folders.txt"
 expect test_privacy_empty_file_allows $P '{"tool_name":"Read","tool_input":{"file_path":"~/Private/a.txt"}}' 0
 
+# --- fix round 1: bypass probes (each must block) ---
+expect test_subshell_dollar_paren $H '{"tool_name":"Bash","tool_input":{"command":"echo $(find ~ -name x)"}}' 2
+expect test_subshell_parens $H '{"tool_name":"Bash","tool_input":{"command":"(find ~ -name x)"}}' 2
+expect test_subshell_backticks $H '{"tool_name":"Bash","tool_input":{"command":"echo `find ~ -name x`"}}' 2
+expect test_bash_c $H '{"tool_name":"Bash","tool_input":{"command":"bash -c '"'"'find ~ -name x'"'"'"}}' 2
+expect test_sh_c $H '{"tool_name":"Bash","tool_input":{"command":"sh -c \"find ~ -name x\""}}' 2
+expect test_zsh_c $H '{"tool_name":"Bash","tool_input":{"command":"zsh -c '"'"'grep -r x ~'"'"'"}}' 2
+expect test_xargs $H '{"tool_name":"Bash","tool_input":{"command":"echo | xargs grep -r x ~"}}' 2
+expect test_legit_grep_still_ok $H '{"tool_name":"Bash","tool_input":{"command":"grep -r foo ~/Code/app"}}' 0
+expect test_legit_find_still_ok $H '{"tool_name":"Bash","tool_input":{"command":"find ~/Code -name x"}}' 0
+expect test_legit_subshell_ok $H '{"tool_name":"Bash","tool_input":{"command":"echo $(ls ~/Code)"}}' 0
+
+printf '~/Private\n' > "$FAKE/.claude/vault-starter/privacy-folders.txt"
+expect test_privacy_dotdot $P '{"tool_name":"Read","tool_input":{"file_path":"~/Code/../Private/a.txt"}}' 2
+expect test_privacy_home_dot $P '{"tool_name":"Bash","tool_input":{"command":"cat $HOME/./Private/a.txt"}}' 2
+expect test_privacy_double_slash $P "{\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"$FAKE//Private/a.txt\"}}" 2
+expect test_privacy_quoted_home $P '{"tool_name":"Bash","tool_input":{"command":"cat \"$HOME\"/Private/a.txt"}}' 2
+expect test_privacy_braced_home $P '{"tool_name":"Bash","tool_input":{"command":"cat ${HOME}/Code/../Private/a.txt"}}' 2
+expect test_privacy_normal_still_ok $P '{"tool_name":"Read","tool_input":{"file_path":"~/Code/../Code/a.txt"}}' 0
+expect test_privacy_prefix_still_ok $P '{"tool_name":"Bash","tool_input":{"command":"cat ~/PrivateNotes/a.txt"}}' 0
+
+# no python3 on PATH: hooks must block, not fail open
+NOPY="$FAKE/nopy"; mkdir -p "$NOPY"
+for hk in kit-home-scope-guard.sh kit-privacy-guard.sh; do
+  printf '%s' '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | PATH="$NOPY" HOME="$FAKE" /bin/bash "$ROOT/hooks/$hk" >/dev/null 2>&1
+  assert_eq "$?" "2" "test_no_python_blocks $hk"
+done
+
 finish_tests
