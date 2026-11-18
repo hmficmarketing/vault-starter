@@ -3,8 +3,7 @@
 # Such searches trigger macOS permission prompts (iCloud Drive, Music, Photos)
 # and walk into personal folders. Exit 2 = block; the message goes back to Claude.
 command -v python3 >/dev/null 2>&1 || { echo "Blocked: kit guard needs python3. Install Apple's command line tools." >&2; exit 2; }
-input=$(cat)
-HOOK_INPUT="$input" python3 -I - <<'PY'
+read -r -d '' PY <<'PY' || true
 import json, os, re, shlex, sys
 
 HOME = os.path.expanduser("~").rstrip("/")
@@ -14,6 +13,15 @@ SEARCHERS = {"find", "mdfind", "grep", "egrep", "fgrep", "rg", "ag", "ack", "fd"
              "locate", "tree", "du"}
 MSG = ("Blocked: no searches across your whole home folder or disk. "
        "Search inside the project or vault folder instead.")
+
+def tokenize(s):
+    # shlex is slow on very large strings (a big file write), so use a plain split there
+    if len(s) > 20000:
+        return re.findall(r"[^\s'\"]+", s)
+    try:
+        return shlex.split(s, posix=True)
+    except ValueError:
+        return s.split()
 
 def block():
     print(MSG, file=sys.stderr)
@@ -27,11 +35,15 @@ def is_broad(tok):
     return t in BROAD or t in {"~/*", HOME + "/*", "/*", "/Users/*"} or bool(re.fullmatch(r"/Users/[^/]+/?", t))
 
 try:
-    data = json.loads(os.environ.get("HOOK_INPUT", "") or "{}")
+    data = json.loads(sys.stdin.read() or "{}")
 except Exception:
+    sys.exit(0)
+if not isinstance(data, dict):
     sys.exit(0)
 tool = data.get("tool_name", "")
 ti = data.get("tool_input") or {}
+if not isinstance(ti, dict):
+    ti = {}
 
 if tool in ("Grep", "Glob"):
     p = ti.get("path") or ""
@@ -49,11 +61,96 @@ cmd = ti.get("command") or ""
 SPLIT = r"\|\||&&|;|\||\n|\$\(|`|\(|\)"
 SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
 XARGS_VAL = {"-I", "-n", "-P", "-L", "-s", "-d", "-E", "-J", "-a"}
+PREFIXES = {"sudo", "timeout", "nice", "command", "exec", "env", "time", "nohup", "caffeinate"}
+OPT_PREFIXES = {"env", "time", "nohup", "caffeinate"}
+GREPS = {"grep", "egrep", "fgrep"}
+PATTERN_SEARCHERS = GREPS | {"rg", "ag", "ack"}
+# short options that take a value, per program
+SHORT_VAL = {"grep": "efmABCdD", "egrep": "efmABCdD", "fgrep": "efmABCdD",
+             "rg": "efgtTmABCjMErd", "ag": "GgpmABC", "ack": "ABCm"}
+LONG_VAL = {"regexp", "file", "max-count", "after-context", "before-context", "context",
+            "include", "exclude", "exclude-dir", "exclude-from", "directories", "devices",
+            "label", "binary-files", "glob", "type", "type-not", "max-depth", "threads",
+            "replace", "ignore-file", "max-columns", "encoding"}
 
-CD_RE = re.compile(r"(^|[;&|\s])cd\s+(~/?|\$HOME/?|\$\{HOME\}/?|" + re.escape(HOME) + r"/?|/)(\s|;|&|$)")
+home_forms = r"(?:~/?|\$HOME/?|\$\{HOME\}/?|" + re.escape(HOME) + r"/?|/)"
+CD_RE = re.compile(r"(^|[;&|\s])cd(?:\s+([\"']?)" + home_forms + r"\2)?\s*(?=;|&|\||\n|$)")
 REC_RE = re.compile(r"(^|[;&|\s])(find\s+\.|grep\s+-[A-Za-z]*[rR]|rg\s|fd\s|ag\s|tree(\s|$)|du\s)")
 
 SHELLC_RE = re.compile(r"\b(bash|sh|zsh|dash|ksh)\s+-[A-Za-z]*c\s+(['\"])(.*?)\2")
+EVAL_RE = re.compile(r"\beval\s+(['\"])(.*?)\1")
+
+def parse_search_args(prog, args):
+    """Return (positionals, has_pattern_option, recursive) for grep-like programs."""
+    valchars = SHORT_VAL.get(prog, "")
+    pos, has_e, rec = [], False, False
+    i = 0
+    while i < len(args):
+        a = args[i]
+        i += 1
+        if a == "--":
+            pos.extend(args[i:])
+            break
+        if a.startswith("--"):
+            name, eq, _val = a[2:].partition("=")
+            if name in ("recursive", "dereference-recursive"):
+                rec = True
+            if name == "directories" and _val == "recurse":
+                rec = True
+            if name in ("regexp", "file"):
+                has_e = True
+            if name in LONG_VAL and not eq and i < len(args):
+                if name == "directories" and args[i] == "recurse":
+                    rec = True
+                i += 1
+            continue
+        if a.startswith("-") and len(a) > 1:
+            for j, ch in enumerate(a[1:], 1):
+                if ch in "rR":
+                    rec = True
+                if ch in valchars:
+                    if ch in "ef" and prog in PATTERN_SEARCHERS - {"ag", "ack"}:
+                        has_e = True
+                    rest = a[j + 1:]
+                    if not rest and i < len(args):
+                        rest = args[i]
+                        i += 1
+                    if ch == "d" and rest == "recurse":
+                        rec = True
+                    break
+            continue
+        pos.append(a)
+    return pos, has_e, rec
+
+def find_paths(args):
+    """Only the start paths of find: skip leading options, stop at the first expression."""
+    out = []
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if re.fullmatch(r"-[HLPEXdsx]+|-O\d", a):
+            i += 1
+        elif a == "-D" or a == "-f":
+            if a == "-f" and i + 1 < len(args):
+                out.append(args[i + 1])
+            i += 2
+        elif a.startswith("-") or a.startswith("(") or a == "!":
+            break
+        else:
+            out.append(a)
+            i += 1
+    return out
+
+def search_paths(prog, args):
+    """The arguments that count as places to search. Patterns and expressions are not places."""
+    if prog == "find":
+        return find_paths(args), True
+    if prog in PATTERN_SEARCHERS:
+        pos, has_e, rec = parse_search_args(prog, args)
+        if not has_e and pos:
+            pos = pos[1:]
+        return pos, (rec if prog in GREPS else True)
+    return list(args), True
 
 def xargs_recursive(prog, args):
     if prog in ("find", "rg", "fd", "fdfind", "ag", "ack", "tree", "du", "locate"):
@@ -71,17 +168,23 @@ def check(cmd, depth=0):
         block()
     for m in SHELLC_RE.finditer(cmd):
         check(m.group(3), depth + 1)
+    for m in EVAL_RE.finditer(cmd):
+        check(m.group(2), depth + 1)
     xsearch = False
     broad_seen = False
     for part in re.split(SPLIT, cmd):
-        try:
-            toks = shlex.split(part, posix=True)
-        except ValueError:
-            toks = part.split()
+        toks = tokenize(part)
         toks = [t.lstrip("(") for t in toks]
         toks = [t for t in toks if t]
-        while toks and (re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", toks[0]) or toks[0] in ("sudo", "timeout", "nice", "command", "exec")):
+        while toks and (re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", toks[0]) or os.path.basename(toks[0]) in PREFIXES):
+            word = os.path.basename(toks[0])
             toks = toks[1:]
+            if word in OPT_PREFIXES:
+                while toks and toks[0].startswith("-"):
+                    flag = toks[0]
+                    toks = toks[1:]
+                    if flag in ("-u", "-t", "-w") and toks:
+                        toks = toks[1:]
             if toks and re.match(r"^\d+[smh]?$", toks[0]):
                 toks = toks[1:]
         is_xargs = bool(toks) and os.path.basename(toks[0]) == "xargs"
@@ -96,10 +199,14 @@ def check(cmd, depth=0):
             continue
         prog = os.path.basename(toks[0])
         args = toks[1:]
+        if prog == "eval":
+            check(" ".join(args), depth + 1)
+            continue
+        paths, counts = search_paths(prog, args)
         if is_xargs:
             if xargs_recursive(prog, args):
                 xsearch = True
-        elif any(is_broad(a) for a in toks[1:]):
+        elif any(is_broad(a) for a in paths):
             broad_seen = True
         if prog in SHELLS:
             for i, a in enumerate(args):
@@ -115,11 +222,25 @@ def check(cmd, depth=0):
             continue
         if prog == "ls" and any(a.startswith("-") and "R" in a for a in args) and any(is_broad(a) for a in args):
             block()
-        if prog in SEARCHERS and any(is_broad(a) for a in args):
+        if prog in SEARCHERS and counts and any(is_broad(a) for a in paths):
             block()
     if xsearch and broad_seen:
         block()
 
-check(cmd)
+try:
+    check(cmd)
+except SystemExit:
+    raise
+except Exception:
+    print("Blocked: the kit guard hit an unexpected error.", file=sys.stderr)
+    sys.exit(2)
 sys.exit(0)
 PY
+# The tool input goes to python on stdin (no size limit). Any unexpected failure blocks.
+python3 -I -c "$PY"
+rc=$?
+if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then
+  echo "Blocked: the kit guard hit an unexpected error." >&2
+  exit 2
+fi
+exit "$rc"

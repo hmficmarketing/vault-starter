@@ -76,4 +76,47 @@ expect test_xargs_pipe_users_name $H '{"tool_name":"Bash","tool_input":{"command
 expect test_bash_c_cd_then_search $H '{"tool_name":"Bash","tool_input":{"command":"bash -c \"cd ~ && grep -r x .\""}}' 2
 expect test_xargs_scoped_pipe_ok $H '{"tool_name":"Bash","tool_input":{"command":"ls ~/Code | xargs grep -l foo"}}' 0
 
+# --- final fix: lone "/" as a pattern or find expression is not a broad path ---
+expect test_grep_v_slash_ok $H '{"tool_name":"Bash","tool_input":{"command":"grep -rn foo ~/Code/app | grep -v /"}}' 0
+expect test_grep_c_slash_ok $H '{"tool_name":"Bash","tool_input":{"command":"grep -c / paths.txt"}}' 0
+expect test_find_path_slash_ok $H '{"tool_name":"Bash","tool_input":{"command":"find . -path / -prune"}}' 0
+expect test_grep_rn_home_blocked $H '{"tool_name":"Bash","tool_input":{"command":"grep -rn foo ~"}}' 2
+expect test_grep_r_home_blocked $H '{"tool_name":"Bash","tool_input":{"command":"grep -r foo ~"}}' 2
+expect test_rg_root_blocked $H '{"tool_name":"Bash","tool_input":{"command":"rg foo /"}}' 2
+expect test_find_root_blocked $H '{"tool_name":"Bash","tool_input":{"command":"find / -name x"}}' 2
+expect test_find_L_home_blocked $H '{"tool_name":"Bash","tool_input":{"command":"find -L ~ -name x"}}' 2
+expect test_grep_e_pattern_then_path_blocked $H '{"tool_name":"Bash","tool_input":{"command":"grep -r -e foo /"}}' 2
+expect test_grep_nonrecursive_slash_ok $H '{"tool_name":"Bash","tool_input":{"command":"grep foo /"}}' 0
+
+# --- final fix: command prefixes and cd forms ---
+expect test_env_find $H '{"tool_name":"Bash","tool_input":{"command":"env find ~ -name x"}}' 2
+expect test_env_var_find $H '{"tool_name":"Bash","tool_input":{"command":"env LC_ALL=C find ~ -name x"}}' 2
+expect test_time_find $H '{"tool_name":"Bash","tool_input":{"command":"time find ~ -name x"}}' 2
+expect test_nohup_find $H '{"tool_name":"Bash","tool_input":{"command":"nohup find ~ -name x"}}' 2
+expect test_caffeinate_find $H '{"tool_name":"Bash","tool_input":{"command":"caffeinate find ~ -name x"}}' 2
+expect test_eval_find $H '{"tool_name":"Bash","tool_input":{"command":"eval \"find ~ -name x\""}}' 2
+expect test_cd_quoted_home $H '{"tool_name":"Bash","tool_input":{"command":"cd \"$HOME\" && grep -r x ."}}' 2
+expect test_cd_braced_home $H '{"tool_name":"Bash","tool_input":{"command":"cd ${HOME} && grep -r x ."}}' 2
+expect test_cd_bare $H '{"tool_name":"Bash","tool_input":{"command":"cd && grep -r x ."}}' 2
+expect test_cd_code_ok $H '{"tool_name":"Bash","tool_input":{"command":"cd ~/Code && grep -r x ."}}' 0
+expect test_env_scoped_ok $H '{"tool_name":"Bash","tool_input":{"command":"env FOO=1 find ~/Code -name x"}}' 0
+
+# --- final fix: very large tool input (over 1 MB) is still checked ---
+BIG="$FAKE/big"; mkdir -p "$BIG"
+python3 -I - "$BIG" <<'PYEOF'
+import json, sys
+b = 'a' * 1500000
+d = sys.argv[1]
+json.dump({'tool_name': 'Write', 'tool_input': {'file_path': '~/Private/x.txt', 'content': b}}, open(d + '/priv.json', 'w'))
+json.dump({'tool_name': 'Write', 'tool_input': {'file_path': '~/Code/x.txt', 'content': b}}, open(d + '/ok.json', 'w'))
+json.dump({'tool_name': 'Bash', 'tool_input': {'command': 'echo ' + b}}, open(d + '/okbash.json', 'w'))
+json.dump({'tool_name': 'Bash', 'tool_input': {'command': 'echo ' + b + '; find ~ -name x'}}, open(d + '/badbash.json', 'w'))
+PYEOF
+run_file() { HOME="$FAKE" bash "$ROOT/hooks/$1" < "$2" >/dev/null 2>&1; RC=$?; }
+run_file $P "$BIG/priv.json";    assert_eq "$RC" "2" "test_big_private_write_blocked"
+run_file $P "$BIG/ok.json";      assert_eq "$RC" "0" "test_big_harmless_write_privacy_ok"
+run_file $H "$BIG/ok.json";      assert_eq "$RC" "0" "test_big_harmless_write_home_ok"
+run_file $H "$BIG/okbash.json";  assert_eq "$RC" "0" "test_big_harmless_bash_ok"
+run_file $H "$BIG/badbash.json"; assert_eq "$RC" "2" "test_big_bad_bash_blocked"
+
 finish_tests

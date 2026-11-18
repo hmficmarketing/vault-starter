@@ -7,8 +7,7 @@
 # normalized (.., ., //) and compared to the folder; (2) a boundary regex over the
 # raw text. Out of scope: symlinks, globs, and relative paths after a `cd`.
 command -v python3 >/dev/null 2>&1 || { echo "Blocked: kit guard needs python3. Install Apple's command line tools." >&2; exit 2; }
-input=$(cat)
-HOOK_INPUT="$input" python3 -I - <<'PY'
+read -r -d '' PY <<'PY' || true
 import json, os, re, shlex, sys
 
 HOME = os.path.expanduser("~").rstrip("/")
@@ -17,8 +16,11 @@ LIST = os.path.join(HOME, ".claude", "vault-starter", "privacy-folders.txt")
 try:
     with open(LIST, encoding="utf-8") as f:
         lines = f.read().splitlines()
-except Exception:
+except FileNotFoundError:
     sys.exit(0)
+except Exception:
+    print("Blocked: the kit guard could not read the private folder list.", file=sys.stderr)
+    sys.exit(2)
 
 forms = []
 for line in lines:
@@ -43,9 +45,20 @@ for line in lines:
         forms.append((line, [line]))
 
 try:
-    data = json.loads(os.environ.get("HOOK_INPUT", "") or "{}")
+    data = json.loads(sys.stdin.read() or "{}")
 except Exception:
     sys.exit(0)
+if not isinstance(data, dict):
+    sys.exit(0)
+
+def tokenize(s):
+    # shlex is slow on very large strings (a big file write), so use a plain split there
+    if len(s) > 20000:
+        return re.findall(r"[^\s'\"]+", s)
+    try:
+        return shlex.split(s, posix=True)
+    except ValueError:
+        return s.split()
 
 def strings(v):
     if isinstance(v, str):
@@ -68,10 +81,7 @@ def expand(t):
 def candidates():
     for s in strs:
         yield s
-        try:
-            toks = shlex.split(s, posix=True)
-        except ValueError:
-            toks = s.split()
+        toks = tokenize(s)
         for t in toks:
             yield t
             if "=" in t:
@@ -104,3 +114,11 @@ for shown, alts in forms:
             sys.exit(2)
 sys.exit(0)
 PY
+# The tool input goes to python on stdin (no size limit). Any unexpected failure blocks.
+python3 -I -c "$PY"
+rc=$?
+if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then
+  echo "Blocked: the kit guard hit an unexpected error." >&2
+  exit 2
+fi
+exit "$rc"
