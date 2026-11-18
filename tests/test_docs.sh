@@ -8,7 +8,7 @@ for f in SETUP.md INSTALL-PROMPT.txt README.md; do assert_file "$ROOT/$f"; done
 for flag in --vault --name --apps --privacy --no-tiers --git; do
   assert_contains "$ROOT/SETUP.md" "$flag"
 done
-for s in "new session" "answers.json" "kept_user_edit" "exit 2" "kit-home-scope-guard.sh" "kit-privacy-guard.sh" "hmficmarketing/vault-starter"; do
+for s in "new chat" "answers.json" "kept_user_edit" "exit 2" "kit-home-scope-guard.sh" "kit-privacy-guard.sh" "hmficmarketing/vault-starter"; do
   assert_contains "$ROOT/SETUP.md" "$s"
 done
 
@@ -25,11 +25,16 @@ if [ -z "$bad" ]; then _pass; else _fail "SETUP.md has find ~ outside hook test:
 if grep 'find ~' "$ROOT/SETUP.md" | grep -q 'tool_input'; then _pass; else _fail "hook test JSON with find ~ missing"; fi
 
 if grep -q 'privacy-folders\|--privacy' "$ROOT/SETUP.md"; then _pass; else _fail "SETUP.md privacy mention"; fi
-assert_contains "$ROOT/SETUP.md" "new session"
+assert_contains "$ROOT/SETUP.md" "new chat"
 assert_contains "$ROOT/SETUP.md" "gh auth setup-git"
 assert_contains "$ROOT/SETUP.md" "one-time code"
 assert_contains "$ROOT/INSTALL-PROMPT.txt" "one-time code"
 assert_contains "$ROOT/SETUP.md" "_macOS_universal.pkg"
-assert_contains "$ROOT/SETUP.md" "answers.json already exists"
+assert_contains "$ROOT/SETUP.md" "answers.json exists AND"
+assert_contains "$ROOT/SETUP.md" 'test -e'
+assert_contains "$ROOT/SETUP.md" "Suites:"
+assert_contains "$ROOT/SETUP.md" "Obsidian.app"
+assert_not_contains "$ROOT/SETUP.md" "ls -d"
+assert_not_contains "$ROOT/INSTALL-PROMPT.txt" "~"
 assert_not_contains "$ROOT/SETUP.md" '"~/'
 finish_tests
