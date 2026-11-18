@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Vault Starter Kit installer core. Standard library only. Run with: python3 -I kit.py"""
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -199,6 +200,111 @@ def split_apps(raw):
     return [a.strip() for a in (raw or "").split(",") if a.strip()]
 
 
+def _sha(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def _load_manifest(path):
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def install_assets(kit, home):
+    """Copy kit skills and hooks into ~/.claude. Never overwrite a file the person edited."""
+    kit, home = Path(kit), Path(home)
+    pairs = []
+    for src in sorted((kit / "skills").glob("kit-*/SKILL.md")):
+        pairs.append((src, home / ".claude" / "skills" / src.parent.name / "SKILL.md"))
+    for src in sorted((kit / "hooks").glob("kit-*.sh")):
+        pairs.append((src, home / ".claude" / "hooks" / src.name))
+    mpath = home / ".claude" / "vault-starter" / "manifest.json"
+    manifest = _load_manifest(mpath)
+    old = dict(manifest)
+    result = {"installed": [], "updated": [], "kept_user_edit": []}
+    for src, dest in pairs:
+        key = str(dest)
+        new_hash = _sha(src)
+        if not dest.exists():
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(src, dest)
+            result["installed"].append(key)
+            manifest[key] = new_hash
+        else:
+            cur = _sha(dest)
+            if cur == new_hash:
+                manifest[key] = new_hash
+            elif manifest.get(key) == cur:
+                shutil.copyfile(src, dest)
+                result["updated"].append(key)
+                manifest[key] = new_hash
+            else:
+                shutil.copyfile(src, key + ".kit-new")
+                result["kept_user_edit"].append(key)
+                continue
+        if dest.suffix == ".sh":
+            os.chmod(dest, 0o755)
+    if manifest != old:
+        mpath.parent.mkdir(parents=True, exist_ok=True)
+        mpath.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return result
+
+
+def write_privacy(folders):
+    path = Path.home() / ".claude" / "vault-starter" / "privacy-folders.txt"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = "".join(f + "\n" for f in folders)
+    if not path.exists() or path.read_text(encoding="utf-8") != text:
+        path.write_text(text, encoding="utf-8")
+
+
+def register_hooks(settings, hook_paths):
+    settings = Path(settings)
+    bad = SystemExit("Your ~/.claude/settings.json isn't valid JSON, so I left it alone. "
+                     "Fix it, then run setup again.")
+    existed = settings.exists()
+    raw = settings.read_text(encoding="utf-8") if existed else ""
+    if raw.strip():
+        try:
+            data = json.loads(raw)
+        except ValueError:
+            raise bad
+    else:
+        data = {}
+    if not isinstance(data, dict):
+        raise bad
+    hooks = data.get("hooks", {})
+    if not isinstance(hooks, dict):
+        raise bad
+    entries = hooks.get("PreToolUse", [])
+    if not isinstance(entries, list):
+        raise bad
+    existing = []
+    for e in entries:
+        if isinstance(e, dict) and isinstance(e.get("hooks"), list):
+            existing += [h.get("command", "") for h in e["hooks"] if isinstance(h, dict)]
+    existing = [c for c in existing if isinstance(c, str)]
+    added = False
+    for hp in hook_paths:
+        hp = str(Path(hp).absolute())
+        cmd = 'bash "' + hp + '"'
+        if any(c == cmd or hp in c for c in existing):
+            continue
+        entries.append({"matcher": ".*", "hooks": [{"type": "command", "command": cmd}]})
+        existing.append(cmd)
+        added = True
+    if not added:
+        return
+    hooks["PreToolUse"] = entries
+    data["hooks"] = hooks
+    if existed and raw.strip():
+        backup(settings)
+    settings.parent.mkdir(parents=True, exist_ok=True)
+    settings.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
 def install(args):
     kit = Path(args.kit_dir)
     home = Path.home()
@@ -234,6 +340,14 @@ def install(args):
 
     if args.git:
         git_init(vault, args.name)
+
+    res = install_assets(kit, home)
+    write_privacy(answers["privacy"])
+    register_hooks(home / ".claude" / "settings.json",
+                   [home / ".claude" / "hooks" / "kit-home-scope-guard.sh",
+                    home / ".claude" / "hooks" / "kit-privacy-guard.sh"])
+    for dest in res["kept_user_edit"]:
+        print("You changed %s, so I kept your version. The new one is at %s.kit-new." % (dest, dest))
 
 
 def main(argv=None):
