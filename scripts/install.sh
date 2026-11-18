@@ -34,6 +34,6 @@ fi
 ARGS=(install --vault "$VAULT" --name "$NAME" --apps "$APPS" --privacy "$PRIVACY" --kit-dir "$DEST")
 [ -n "$NO_TIERS" ] && ARGS+=(--no-tiers)
 [ -n "$GIT" ] && ARGS+=(--git)
-python3 -I "$DEST/scripts/kit.py" "${ARGS[@]}"
+python3 -I -B "$DEST/scripts/kit.py" "${ARGS[@]}"
 
 echo "vault-starter: installed"
