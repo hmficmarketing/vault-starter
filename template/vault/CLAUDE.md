@@ -47,4 +47,4 @@ Before editing the vault in a new session, run `git pull --rebase` if the vault 
 - One fact per file.
 - `MEMORY.md` is the index. It points to the files. It does not hold the facts.
 - Update an existing memory instead of making a duplicate.
-- Tag each memory as decided (you said it) or proposed (I suggested it). Do not act on a proposal as if it were decided.
+- Tag each plan line as decided ({{NAME}} said it) or proposed (Claude suggested it). Do not act on a proposal as if it were decided. Ask first.

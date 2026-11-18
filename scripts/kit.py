@@ -266,6 +266,40 @@ def write_privacy(folders):
         path.write_text(text, encoding="utf-8")
 
 
+def read_privacy_file():
+    path = Path.home() / ".claude" / "vault-starter" / "privacy-folders.txt"
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return None
+    return [l.strip() for l in lines if l.strip() and not l.strip().startswith("#")]
+
+
+def _same_folder(a, b):
+    return a.rstrip("/") == b.rstrip("/")
+
+
+def add_privacy(existing, new):
+    """Return the folders in new that are not already in existing (no duplicates)."""
+    out = []
+    for f in new:
+        if not any(_same_folder(f, e) for e in list(existing) + out):
+            out.append(f)
+    return out
+
+
+def append_privacy(folders):
+    """Append folders to the list file. Keeps everything already in it, comments included."""
+    if not folders:
+        return
+    path = Path.home() / ".claude" / "vault-starter" / "privacy-folders.txt"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    old = path.read_text(encoding="utf-8") if path.exists() else ""
+    if old and not old.endswith("\n"):
+        old += "\n"
+    path.write_text(old + "".join(f + "\n" for f in folders), encoding="utf-8")
+
+
 def register_hooks(settings, hook_paths):
     settings = Path(settings)
     bad = SystemExit("Your ~/.claude/settings.json isn't valid JSON, so I left it alone. "
@@ -330,17 +364,34 @@ def install(args):
     merge_section(home / ".claude" / "CLAUDE.md", render(section, values))
 
     link_memory(vault)
-    write_router(home / "Code", apps, template=kit / "template" / "code-router" / "CLAUDE.md", values=values)
-
     ans = home / ".claude" / "vault-starter" / "answers.json"
-    if args.privacy is None:
-        try:
-            prev = json.loads(ans.read_text(encoding="utf-8")).get("privacy", [])
-            privacy = prev if isinstance(prev, list) else []
-        except Exception:
-            privacy = []
+    try:
+        prev_answers = json.loads(ans.read_text(encoding="utf-8"))
+        if not isinstance(prev_answers, dict):
+            prev_answers = {}
+    except Exception:
+        prev_answers = {}
+    if args.code_dir:
+        code_dir = Path(os.path.abspath(os.path.expanduser(args.code_dir)))
+    elif isinstance(prev_answers.get("code_dir"), str) and prev_answers["code_dir"]:
+        code_dir = Path(prev_answers["code_dir"])
     else:
+        code_dir = home / "Code"
+    write_router(code_dir, apps, template=kit / "template" / "code-router" / "CLAUDE.md", values=values)
+
+    if args.privacy is not None:
         privacy = [p.strip() for p in args.privacy.split(";") if p.strip()]
+    else:
+        # The list file is the source of truth, so answers.json never drifts from it.
+        privacy = read_privacy_file()
+        if privacy is None:
+            prev = prev_answers.get("privacy", [])
+            privacy = prev if isinstance(prev, list) else []
+    added = []
+    if args.privacy_add:
+        wanted = [p.strip() for p in args.privacy_add.split(";") if p.strip()]
+        added = add_privacy(privacy, wanted)
+        privacy = privacy + added
     answers = {
         "name": args.name,
         "vault": str(vault),
@@ -348,6 +399,7 @@ def install(args):
         "privacy": privacy,
         "no_tiers": bool(args.no_tiers),
         "git": bool(args.git),
+        "code_dir": str(code_dir),
     }
     ans.parent.mkdir(parents=True, exist_ok=True)
     ans.write_text(json.dumps(answers, indent=2) + "\n", encoding="utf-8")
@@ -358,6 +410,8 @@ def install(args):
     res = install_assets(kit, home)
     if args.privacy is not None or not (home / ".claude" / "vault-starter" / "privacy-folders.txt").exists():
         write_privacy(privacy)
+    elif added:
+        append_privacy(added)
     register_hooks(home / ".claude" / "settings.json",
                    [home / ".claude" / "hooks" / "kit-home-scope-guard.sh",
                     home / ".claude" / "hooks" / "kit-privacy-guard.sh"])
@@ -375,6 +429,8 @@ def main(argv=None):
     i.add_argument("--name", required=True)
     i.add_argument("--apps", default="")
     i.add_argument("--privacy", default=None)
+    i.add_argument("--privacy-add", default=None)
+    i.add_argument("--code-dir", default=None)
     i.add_argument("--no-tiers", action="store_true")
     i.add_argument("--git", action="store_true")
     i.add_argument("--kit-dir", default=str(Path(__file__).resolve().parent.parent))

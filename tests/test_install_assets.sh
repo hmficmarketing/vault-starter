@@ -225,6 +225,99 @@ test_privacy_kept_on_rerun() {
   rm -rf "$h"
 }
 
+priv_rc() { # home folder-name -> exit code of the privacy hook on a Read in that folder
+  local rc=0
+  printf '{"tool_name":"Read","tool_input":{"file_path":"%s/%s/a.txt"}}' "$1" "$2" \
+    | HOME="$1" bash "$1/.claude/hooks/kit-privacy-guard.sh" >/dev/null 2>&1 || rc=$?
+  echo "$rc"
+}
+
+test_privacy_add() {
+  local h; h="$(fake_home)"
+  local pf="$h/.claude/vault-starter/privacy-folders.txt"
+  run_install "$h" --vault "$h/Vault" --name Sam --apps "alpha" --privacy "$h/Private"
+  run_install "$h" --vault "$h/Vault" --name Sam --apps "alpha" --privacy-add "$h/Other"
+  assert_contains "$pf" "$h/Private"
+  assert_contains "$pf" "$h/Other"
+  assert_eq "$(priv_rc "$h" Private)" "2" "Private still blocked"
+  assert_eq "$(priv_rc "$h" Other)" "2" "Other blocked"
+  assert_eq "$(priv_rc "$h" Code)" "0" "Code allowed"
+  # re-run with no flag keeps both, answers.json lists both
+  run_install "$h" --vault "$h/Vault" --name Sam --apps "alpha"
+  assert_contains "$pf" "$h/Private"
+  assert_contains "$pf" "$h/Other"
+  assert_contains "$h/.claude/vault-starter/answers.json" "$h/Private"
+  assert_contains "$h/.claude/vault-starter/answers.json" "$h/Other"
+  # duplicate add does not duplicate
+  run_install "$h" --vault "$h/Vault" --name Sam --apps "alpha" --privacy-add "$h/Other;$h/Other/"
+  assert_eq "$(grep -c "Other" "$pf")" "1" "no duplicate line"
+  assert_eq "$(grep -c "Other" "$h/.claude/vault-starter/answers.json")" "1" "no duplicate in answers"
+  rm -rf "$h"
+}
+
+test_privacy_add_keeps_comments_and_file_is_source_of_truth() {
+  local h; h="$(fake_home)"
+  local pf="$h/.claude/vault-starter/privacy-folders.txt"
+  run_install "$h" --vault "$h/Vault" --name Sam --apps "alpha" --privacy "$h/Private;$h/Gone"
+  printf '# my list\n%s\n%s\n' "$h/Private" "$h/Gone" > "$pf"
+  # the person deletes a line by hand, then the kit re-runs
+  printf '# my list\n%s\n' "$h/Private" > "$pf"
+  run_install "$h" --vault "$h/Vault" --name Sam --apps "alpha"
+  assert_not_contains "$h/.claude/vault-starter/answers.json" "Gone"
+  assert_contains "$h/.claude/vault-starter/answers.json" "Private"
+  run_install "$h" --vault "$h/Vault" --name Sam --apps "alpha" --privacy-add "$h/Other"
+  assert_contains "$pf" "# my list"
+  assert_contains "$pf" "$h/Other"
+  assert_not_contains "$pf" "Gone"
+  rm -rf "$h"
+}
+
+test_privacy_add_first_time_no_list() {
+  local h; h="$(fake_home)"
+  run_install "$h" --vault "$h/Vault" --name Sam --apps "alpha" --privacy-add "$h/Other"
+  assert_contains "$h/.claude/vault-starter/privacy-folders.txt" "$h/Other"
+  assert_eq "$(priv_rc "$h" Other)" "2" "Other blocked"
+  rm -rf "$h"
+}
+
+test_code_dir_flag() {
+  local h; h="$(fake_home)"
+  run_install "$h" --vault "$h/Vault" --name Sam --apps "alpha, beta" --code-dir "$h/Projects"
+  assert_file "$h/Projects/CLAUDE.md"
+  assert_contains "$h/Projects/CLAUDE.md" "- alpha"
+  if [ -e "$h/Code/CLAUDE.md" ]; then _fail "router written in ~/Code"; else _pass; fi
+  assert_contains "$h/.claude/vault-starter/answers.json" "\"code_dir\": \"$h/Projects\""
+  # re-run with no flag keeps using the saved folder
+  run_install "$h" --vault "$h/Vault" --name Sam --apps "alpha, beta, gamma"
+  assert_contains "$h/Projects/CLAUDE.md" "- gamma"
+  if [ -e "$h/Code/CLAUDE.md" ]; then _fail "router moved to ~/Code on re-run"; else _pass; fi
+  rm -rf "$h"
+}
+
+test_code_dir_default() {
+  local h; h="$(fake_home)"
+  run_install "$h" --vault "$h/Vault" --name Sam --apps "alpha"
+  assert_file "$h/Code/CLAUDE.md"
+  assert_contains "$h/.claude/vault-starter/answers.json" "\"code_dir\": \"$h/Code\""
+  rm -rf "$h"
+}
+
+test_memory_section_installed() {
+  local h; h="$(fake_home)"
+  run_install "$h" --vault "$h/Vault" --name Sam --apps "alpha" --no-tiers
+  assert_contains "$h/.claude/CLAUDE.md" "## Memory"
+  assert_contains "$h/.claude/CLAUDE.md" "decided (Sam said it)"
+  assert_not_contains "$h/.claude/CLAUDE.md" "{{NAME}}"
+  assert_contains "$h/Vault/CLAUDE.md" "decided (Sam said it)"
+  rm -rf "$h"
+}
+
+test_vault_gitignore_secrets() {
+  for p in '.env' '.env.*' '!.env.example' '*.pem' '*.key'; do
+    assert_contains "$ROOT/template/vault/.gitignore" "$p"
+  done
+}
+
 for t in $(declare -F | awk '{print $3}' | grep '^test_'); do
   echo "- $t"
   "$t"

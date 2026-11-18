@@ -10,6 +10,13 @@ Personal notes in shared repos go in `CLAUDE.local.md`, not `CLAUDE.md`.
 
 API keys, tokens and passwords live only in .env files that git ignores. Never paste them into chat, never write them into code or CLAUDE.md, never commit them, never print their values. When a new key is needed, tell me the variable name and which .env file it goes in, and I'll paste it in myself. Before any commit, check that no .env or key file is staged.
 
+## Memory
+
+- One fact per memory file.
+- `MEMORY.md` is the index. It points to the files. It does not hold the facts.
+- Update an existing memory instead of making a duplicate.
+- Tag each plan line as decided ({{NAME}} said it) or proposed (Claude suggested it). Never act on a proposal as if it were decided. Ask first.
+
 <!-- kit:tiers -->
 ## Tier words
 

@@ -1,17 +1,20 @@
 #!/bin/bash
 # Vault Starter Kit installer. Run by Claude Code on the person's behalf.
-# Usage: install.sh --vault PATH --name NAME --apps "a, b" [--privacy "p1;p2"] [--no-tiers] [--git]
+# Usage: install.sh --vault PATH --name NAME --apps "a, b" [--privacy "p1;p2"] [--privacy-add "p1;p2"]
+#        [--code-dir PATH] [--no-tiers] [--git]
 set -e
 SRC="$(cd "$(dirname "$0")/.." && pwd -P)"
 DEST="$HOME/.claude/vault-starter"
 
-VAULT="$HOME/Vault"; NAME=""; APPS=""; PRIVACY=""; PRIVACY_SET=""; NO_TIERS=""; GIT=""
+VAULT="$HOME/Vault"; NAME=""; APPS=""; PRIVACY=""; PRIVACY_SET=""; PRIVACY_ADD=""; CODE_DIR=""; NO_TIERS=""; GIT=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --vault) VAULT="$2"; shift 2 ;;
     --name) NAME="$2"; shift 2 ;;
     --apps) APPS="$2"; shift 2 ;;
     --privacy) PRIVACY="$2"; PRIVACY_SET=1; shift 2 ;;
+    --privacy-add) PRIVACY_ADD="$2"; shift 2 ;;
+    --code-dir) CODE_DIR="$2"; shift 2 ;;
     --no-tiers) NO_TIERS=1; shift ;;
     --git) GIT=1; shift ;;
     *) echo "vault-starter: unknown option: $1" >&2; exit 2 ;;
@@ -33,6 +36,8 @@ fi
 
 ARGS=(install --vault "$VAULT" --name "$NAME" --apps "$APPS" --kit-dir "$DEST")
 [ -n "$PRIVACY_SET" ] && ARGS+=(--privacy "$PRIVACY")
+[ -n "$PRIVACY_ADD" ] && ARGS+=(--privacy-add "$PRIVACY_ADD")
+[ -n "$CODE_DIR" ] && ARGS+=(--code-dir "$CODE_DIR")
 [ -n "$NO_TIERS" ] && ARGS+=(--no-tiers)
 [ -n "$GIT" ] && ARGS+=(--git)
 python3 -I -B "$DEST/scripts/kit.py" "${ARGS[@]}"
