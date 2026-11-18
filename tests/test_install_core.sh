@@ -137,13 +137,13 @@ test_no_tiers() {
 
 test_answers_saved() {
   local h; h="$(fake_home)"
-  run_install "$h" --vault "$h/Vault" --name Sam --apps "alpha, beta" --privacy "one;two" --no-tiers
+  run_install "$h" --vault "$h/Vault" --name Sam --apps "alpha, beta" --privacy "/one;/two" --no-tiers
   local a="$h/.claude/vault-starter/answers.json"
   assert_contains "$a" '"name": "Sam"'
   assert_contains "$a" '"alpha"'
   assert_contains "$a" '"beta"'
-  assert_contains "$a" '"one"'
-  assert_contains "$a" '"two"'
+  assert_contains "$a" "\"/one\""
+  assert_contains "$a" "\"/two\""
   assert_contains "$a" "$h/Vault"
   assert_contains "$a" '"no_tiers": true'
   rm -rf "$h"

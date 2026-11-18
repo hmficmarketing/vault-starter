@@ -275,8 +275,26 @@ def read_privacy_file():
     return [l.strip() for l in lines if l.strip() and not l.strip().startswith("#")]
 
 
+def _norm_folder(f):
+    f = f.strip()
+    if f.startswith("~/"):
+        f = str(Path.home()) + f[1:]
+    return f.rstrip("/")
+
+
 def _same_folder(a, b):
-    return a.rstrip("/") == b.rstrip("/")
+    return _norm_folder(a) == _norm_folder(b)
+
+
+def check_folders(flag, raw):
+    """Split a ';' list and refuse any entry that is not a full path."""
+    out = [p.strip() for p in raw.split(";") if p.strip()]
+    for p in out:
+        if not (p.startswith("/") or p.startswith("~/")):
+            raise SystemExit(
+                "vault-starter: %s: \"%s\" is not a full folder path. "
+                "Each folder must start with / or ~/. Nothing was changed." % (flag, p))
+    return out
 
 
 def add_privacy(existing, new):
@@ -346,6 +364,8 @@ def register_hooks(settings, hook_paths):
 
 
 def install(args):
+    privacy_flag = None if args.privacy is None else check_folders("--privacy", args.privacy)
+    privacy_new = [] if not args.privacy_add else check_folders("--privacy-add", args.privacy_add)
     kit = Path(args.kit_dir)
     home = Path.home()
     vault = Path(os.path.abspath(os.path.expanduser(args.vault)))
@@ -380,7 +400,7 @@ def install(args):
     write_router(code_dir, apps, template=kit / "template" / "code-router" / "CLAUDE.md", values=values)
 
     if args.privacy is not None:
-        privacy = [p.strip() for p in args.privacy.split(";") if p.strip()]
+        privacy = privacy_flag
     else:
         # The list file is the source of truth, so answers.json never drifts from it.
         privacy = read_privacy_file()
@@ -389,8 +409,7 @@ def install(args):
             privacy = prev if isinstance(prev, list) else []
     added = []
     if args.privacy_add:
-        wanted = [p.strip() for p in args.privacy_add.split(";") if p.strip()]
-        added = add_privacy(privacy, wanted)
+        added = add_privacy(privacy, privacy_new)
         privacy = privacy + added
     answers = {
         "name": args.name,

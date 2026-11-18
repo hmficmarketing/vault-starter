@@ -118,7 +118,7 @@ PY
 python3 -I -c "$PY"
 rc=$?
 if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then
-  echo "Blocked: the kit guard hit an unexpected error." >&2
+  echo "Blocked: The kit guard could not run Python, so it blocked this to be safe. To fix it, open the Terminal app once and run: xcode-select --install. Or ask someone to remove the kit- entries from ~/.claude/settings.json." >&2
   exit 2
 fi
 exit "$rc"

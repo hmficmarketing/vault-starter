@@ -119,4 +119,22 @@ run_file $H "$BIG/ok.json";      assert_eq "$RC" "0" "test_big_harmless_write_ho
 run_file $H "$BIG/okbash.json";  assert_eq "$RC" "0" "test_big_harmless_bash_ok"
 run_file $H "$BIG/badbash.json"; assert_eq "$RC" "2" "test_big_bad_bash_blocked"
 
+# --- regression fix: lister modes and find -- still block ---
+expect test_rg_files_home $H '{"tool_name":"Bash","tool_input":{"command":"rg --files ~"}}' 2
+expect test_rg_files_root $H '{"tool_name":"Bash","tool_input":{"command":"rg --files /"}}' 2
+expect test_ag_g_home $H '{"tool_name":"Bash","tool_input":{"command":"ag -g x ~"}}' 2
+expect test_ack_f_home $H '{"tool_name":"Bash","tool_input":{"command":"ack -f ~"}}' 2
+expect test_find_dashdash_home $H '{"tool_name":"Bash","tool_input":{"command":"find -- ~ -name x"}}' 2
+expect test_rg_pattern_and_broad_path $H '{"tool_name":"Bash","tool_input":{"command":"rg foo ~"}}' 2
+expect test_grep_v_slash_still_ok $H '{"tool_name":"Bash","tool_input":{"command":"grep -v /"}}' 0
+
+# --- lock-out message when python fails unexpectedly ---
+BADPY="$FAKE/badpy"; mkdir -p "$BADPY"
+printf '#!/bin/sh\nexit 1\n' > "$BADPY/python3"; chmod +x "$BADPY/python3"
+for hk in kit-home-scope-guard.sh kit-privacy-guard.sh; do
+  ERR="$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | PATH="$BADPY:$PATH" HOME="$FAKE" /bin/bash "$ROOT/hooks/$hk" 2>&1 >/dev/null)"; RC=$?
+  assert_eq "$RC" "2" "test_python_failure_blocks $hk"
+  assert_contains_str "$ERR" "xcode-select --install" "recovery message $hk"
+done
+
 finish_tests

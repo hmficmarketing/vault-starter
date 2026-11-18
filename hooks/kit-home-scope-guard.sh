@@ -67,7 +67,7 @@ GREPS = {"grep", "egrep", "fgrep"}
 PATTERN_SEARCHERS = GREPS | {"rg", "ag", "ack"}
 # short options that take a value, per program
 SHORT_VAL = {"grep": "efmABCdD", "egrep": "efmABCdD", "fgrep": "efmABCdD",
-             "rg": "efgtTmABCjMErd", "ag": "GgpmABC", "ack": "ABCm"}
+             "rg": "efgtTmABCjMErd", "ag": "GgpmABC", "ack": "ABCmg"}
 LONG_VAL = {"regexp", "file", "max-count", "after-context", "before-context", "context",
             "include", "exclude", "exclude-dir", "exclude-from", "directories", "devices",
             "label", "binary-files", "glob", "type", "type-not", "max-depth", "threads",
@@ -97,7 +97,7 @@ def parse_search_args(prog, args):
                 rec = True
             if name == "directories" and _val == "recurse":
                 rec = True
-            if name in ("regexp", "file"):
+            if name in ("regexp", "file", "files"):
                 has_e = True
             if name in LONG_VAL and not eq and i < len(args):
                 if name == "directories" and args[i] == "recurse":
@@ -108,6 +108,9 @@ def parse_search_args(prog, args):
             for j, ch in enumerate(a[1:], 1):
                 if ch in "rR":
                     rec = True
+                # modes with no search pattern: ag -g/-G, ack -f/-g
+                if (prog == "ag" and ch in "gG") or (prog == "ack" and ch in "fg"):
+                    has_e = True
                 if ch in valchars:
                     if ch in "ef" and prog in PATTERN_SEARCHERS - {"ag", "ack"}:
                         has_e = True
@@ -134,6 +137,8 @@ def find_paths(args):
             if a == "-f" and i + 1 < len(args):
                 out.append(args[i + 1])
             i += 2
+        elif a == "--":
+            i += 1
         elif a.startswith("-") or a.startswith("(") or a == "!":
             break
         else:
@@ -148,7 +153,9 @@ def search_paths(prog, args):
     if prog in PATTERN_SEARCHERS:
         pos, has_e, rec = parse_search_args(prog, args)
         if not has_e and pos:
-            pos = pos[1:]
+            # rg/ag/ack: if unsure, a broad first word followed by more words is a path, not a pattern
+            if prog in GREPS or not (is_broad(pos[0]) and len(pos) > 1):
+                pos = pos[1:]
         return pos, (rec if prog in GREPS else True)
     return list(args), True
 
@@ -232,7 +239,7 @@ try:
 except SystemExit:
     raise
 except Exception:
-    print("Blocked: the kit guard hit an unexpected error.", file=sys.stderr)
+    print("Blocked: The kit guard could not run Python, so it blocked this to be safe. To fix it, open the Terminal app once and run: xcode-select --install. Or ask someone to remove the kit- entries from ~/.claude/settings.json.", file=sys.stderr)
     sys.exit(2)
 sys.exit(0)
 PY
@@ -240,7 +247,7 @@ PY
 python3 -I -c "$PY"
 rc=$?
 if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then
-  echo "Blocked: the kit guard hit an unexpected error." >&2
+  echo "Blocked: The kit guard could not run Python, so it blocked this to be safe. To fix it, open the Terminal app once and run: xcode-select --install. Or ask someone to remove the kit- entries from ~/.claude/settings.json." >&2
   exit 2
 fi
 exit "$rc"

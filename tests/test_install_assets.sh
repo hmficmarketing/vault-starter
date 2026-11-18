@@ -318,6 +318,29 @@ test_vault_gitignore_secrets() {
   done
 }
 
+test_privacy_bad_entry_refused() {
+  local h; h="$(fake_home)"
+  local pf="$h/.claude/vault-starter/privacy-folders.txt"
+  run_install "$h" --vault "$h/Vault" --name Sam --apps "alpha" --privacy "$h/Private"
+  local before; before="$(cat "$pf")"
+  if run_install "$h" --vault "$h/Vault" --name Sam --apps "alpha" --privacy-add "Photos"; then _fail "bad --privacy-add accepted"; else _pass; fi
+  assert_contains "$h/install.out" "\"Photos\" is not a full folder path"
+  assert_eq "$(cat "$pf")" "$before" "list unchanged"
+  if run_install "$h" --vault "$h/Vault" --name Sam --apps "alpha" --privacy "$h/Private;relative/x"; then _fail "bad --privacy accepted"; else _pass; fi
+  assert_contains "$h/install.out" "\"relative/x\""
+  assert_eq "$(cat "$pf")" "$before" "list unchanged after bad --privacy"
+  rm -rf "$h"
+}
+
+test_privacy_tilde_and_abs_same_folder() {
+  local h; h="$(fake_home)"
+  local pf="$h/.claude/vault-starter/privacy-folders.txt"
+  run_install "$h" --vault "$h/Vault" --name Sam --apps "alpha" --privacy "~/Private"
+  run_install "$h" --vault "$h/Vault" --name Sam --apps "alpha" --privacy-add "$h/Private"
+  assert_eq "$(grep -c "Private" "$pf")" "1" "tilde and absolute are one folder"
+  rm -rf "$h"
+}
+
 for t in $(declare -F | awk '{print $3}' | grep '^test_'); do
   echo "- $t"
   "$t"
