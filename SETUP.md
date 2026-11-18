@@ -10,8 +10,10 @@ These instructions are for Claude. The person you are helping is on a Mac, uses 
 - Never print secrets, tokens, or passwords.
 - Back up before touching an existing file. The installer does this for you. If you edit anything by hand, copy it to `<name>.bak` first.
 - Never edit around an installer refusal. See step 5.
+- Use absolute paths in every command that has quotes, `--vault`, `--privacy`, `--source` and `git -C`. First run `echo $HOME` and use the full result (it looks like `/Users/<them>`). The `~` shortcut does not expand inside quotes, so it silently breaks things. Below, `<home>` means that full path.
+- First run or update? If answers.json already exists in `<home>/.claude/vault-starter/`, this is an update. Go straight to step 9. Do not do steps 1 to 8 again.
 
-The only clicks the person should need are: downloading Obsidian (they may have done this already), the Xcode tools "Install" button if it appears, and the GitHub sign-in in the browser.
+The only clicks the person should need are: downloading Obsidian (they may have done this already), the Xcode tools "Install" button if it appears, the GitHub installer window if you had to download it (Continue, Install, Mac password), and the GitHub sign-in in the browser.
 
 ## 1. Check the tools
 
@@ -20,12 +22,12 @@ Run each check. Fix only what fails.
 - git: run `git --version`. If it fails, run `xcode-select --install` and tell the person: "A box will pop up. Click Install and wait for it to finish. Tell me when it is done." Then check again.
 - gh: run `gh --version`. If it fails:
   - If `brew --version` works, run `brew install gh`.
-  - Otherwise, tell the person you need to download the GitHub tool from GitHub's official releases (cli/cli) and get their OK first. Then download the latest macOS universal `.pkg`, install it, and delete the download.
-- Sign-in: run `gh auth status`. If it fails, run `gh auth login --web` and tell the person: "Your browser will open. Click through the GitHub sign-in and tell me when you are done."
+  - Otherwise, tell the person you need to download the GitHub tool from GitHub's official releases (cli/cli) and get their OK first. Then run `curl -s https://api.github.com/repos/cli/cli/releases/latest`, pick the asset whose name ends in `_macOS_universal.pkg`, and download it into a fresh temp folder (`mktemp -d`). Run `open "<pkg path>"` and tell the person: "An installer window opens. Click Continue, then Install, and enter your Mac password." Never use sudo. When it finishes, check `gh --version`, then delete the temp folder.
+- Sign-in: run `gh auth status`. If it fails, run `gh auth login --web --git-protocol https` in the background (so the call does not block). Read its output as it streams. It prints a one-time code. Show it to the person in plain words: "A browser page will open. Type this code: XXXX-XXXX, then click Authorize." Wait until `gh auth status` succeeds. Then run `gh auth setup-git`, so plain git pulls on the private repo work.
 
 ## 2. Get the kit
 
-If `~/Code/vault-starter` does not exist, run `gh repo clone hmficmarketing/vault-starter ~/Code/vault-starter` (create `~/Code` first if needed). If it exists, run `git -C ~/Code/vault-starter pull`.
+If `<home>/Code/vault-starter` does not exist, run `gh repo clone hmficmarketing/vault-starter <home>/Code/vault-starter` (create `<home>/Code` first if needed). If it exists, run `git -C <home>/Code/vault-starter pull`.
 
 ## 3. Read what is already there
 
@@ -40,21 +42,23 @@ Tell the person what you found in 3 short lines. Example: "You have a few skills
 
 Ask one at a time. Wait for each answer.
 
-1. Where should the vault go? Default `~/Vault`.
+1. Where should the vault go? Default `<home>/Vault`. Store it as a full absolute path.
 2. What is your name?
 3. What apps or projects do you have so far? A short list is fine. Pass it as `--apps "a, b"`.
 4. Do you want the vault backed up to GitHub? Yes or no.
 5. "What personal stuff should Claude never open? For example your texts, photos, email, or anything else."
 
-For question 5, do not search. Use what you already know about where macOS keeps the data for each thing they named. Then confirm each candidate with a direct existence check on that exact path, for example `ls -d "<path>"`. Only keep paths that exist. If you are not sure where something lives, ask the person. Show them the final list in plain words and get a yes. If they name nothing, the list stays empty. You will pass the list as `--privacy "path1;path2"`. The installer saves it to `~/.claude/vault-starter/privacy-folders.txt`, and the privacy guard blocks Claude from reading those folders.
+For question 5, do not search. Use what you already know about where macOS keeps the data for each thing they named. Then confirm each candidate with a direct existence check on that exact path, for example `ls -d "<absolute path>"`. Use full absolute paths, never `~`. Only keep paths that exist. If you are not sure where something lives, ask the person. Show them the final list in plain words and get a yes. If they name nothing, the list stays empty. You will pass the list as `--privacy "path1;path2"`. The installer saves it to `~/.claude/vault-starter/privacy-folders.txt`, and the privacy guard blocks Claude from reading those folders.
 
 ## 5. Run the installer
 
 Run:
 
 ```
-bash ~/Code/vault-starter/scripts/install.sh --vault "<vault>" --name "<name>" --apps "<apps>" --privacy "<p1;p2>"
+bash "<home>/Code/vault-starter/scripts/install.sh" --vault "<vault>" --name "<name>" --apps "<apps>" --privacy "<p1;p2>"
 ```
+
+All paths in it are absolute.
 
 - Leave out `--privacy` if the list is empty.
 - Add `--no-tiers` if `~/.claude/CLAUDE.md` already mentions "tier 1" (any capitalization). It means they already have a tier system, and the kit should not add its own.
@@ -77,23 +81,23 @@ Get their login from `gh api user --jq .login`.
 
 Show the person the real output of each, not a summary.
 
-- Run `bash ~/Code/vault-starter/tests/run.sh`. It must pass. It runs in a throwaway folder and does not touch their files.
+- Run `bash <home>/Code/vault-starter/tests/run.sh`. It must pass. It runs in a throwaway folder and does not touch their files.
 - Prove the search guard works without running a risky search. Pipe a fake tool call into the installed hook and read the exit code:
 
   ```
-  echo '{"tool_name":"Bash","tool_input":{"command":"find ~ -name x"}}' | bash ~/.claude/hooks/kit-home-scope-guard.sh; echo "exit $?"
+  echo '{"tool_name":"Bash","tool_input":{"command":"find ~ -name x"}}' | bash <home>/.claude/hooks/kit-home-scope-guard.sh; echo "exit $?"
   ```
 
   Expect `exit 2`.
 - If the privacy list is not empty, do the same for the privacy hook with a Read of a file inside the first privacy folder:
 
   ```
-  echo '{"tool_name":"Read","tool_input":{"file_path":"<first privacy folder>/x"}}' | bash ~/.claude/hooks/kit-privacy-guard.sh; echo "exit $?"
+  echo '{"tool_name":"Read","tool_input":{"file_path":"<first privacy folder>/x"}}' | bash <home>/.claude/hooks/kit-privacy-guard.sh; echo "exit $?"
   ```
 
   Expect `exit 2`. (This only checks the path. It does not open anything.)
 - List the skills: `ls ~/.claude/skills | grep '^kit-'`. You should see 6: kit-daily, kit-capture, kit-eod-flush, kit-handoff, kit-dream, kit-new-project.
-- `git -C "<vault>" log -1` shows a commit (when `--git` was used).
+- `git -C <vault> log -1` shows a commit (when `--git` was used).
 - `git -C "<vault>" remote -v` shows the remote (when backup is on).
 
 If any check fails, say so plainly and show the output. Do not call setup done.
@@ -108,8 +112,8 @@ Tell the person: "Open Obsidian. Choose Open folder as vault. Pick the vault fol
 
 When the person says "update my vault starter kit":
 
-1. Run `git -C ~/Code/vault-starter pull`.
-2. Read `~/.claude/vault-starter/answers.json` for the vault path, name, and apps.
-3. Re-run the installer with those values and no `--privacy` flag, so their privacy list is kept. Add `--no-tiers` and `--git` if they were used before.
+1. Run `git -C <home>/Code/vault-starter pull`.
+2. Read `<home>/.claude/vault-starter/answers.json`. Keys: `name`, `vault`, `apps` (a list, join it with ", " for `--apps`), `privacy`, `no_tiers` and `git` (true or false).
+3. Re-run the installer with those values and no `--privacy` flag, so their privacy list is kept. Add `--no-tiers` if `no_tiers` is true and `--git` if `git` is true. Do not re-check for "tier 1" here, since the kit's own block would match.
 4. Look for lines that say `kept_user_edit` or "so I kept your version". Tell the person in plain words which files the kit left alone because they had changed them, and offer to show the difference for each one (compare the file with its `.kit-new` copy).
 5. Remind them to start a new session if hooks or skills changed.

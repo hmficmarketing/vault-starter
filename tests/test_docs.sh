@@ -26,4 +26,10 @@ if grep 'find ~' "$ROOT/SETUP.md" | grep -q 'tool_input'; then _pass; else _fail
 
 if grep -q 'privacy-folders\|--privacy' "$ROOT/SETUP.md"; then _pass; else _fail "SETUP.md privacy mention"; fi
 assert_contains "$ROOT/SETUP.md" "new session"
+assert_contains "$ROOT/SETUP.md" "gh auth setup-git"
+assert_contains "$ROOT/SETUP.md" "one-time code"
+assert_contains "$ROOT/INSTALL-PROMPT.txt" "one-time code"
+assert_contains "$ROOT/SETUP.md" "_macOS_universal.pkg"
+assert_contains "$ROOT/SETUP.md" "answers.json already exists"
+assert_not_contains "$ROOT/SETUP.md" '"~/'
 finish_tests

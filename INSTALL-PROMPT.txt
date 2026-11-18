@@ -1,5 +1,7 @@
 Set up my vault starter kit.
 
-Clone github.com/hmficmarketing/vault-starter to ~/Code/vault-starter (use gh; sign me in through the browser if needed) and follow its SETUP.md exactly. Before you start, read SETUP.md's rules.
+Clone github.com/hmficmarketing/vault-starter to ~/Code/vault-starter (use gh) and follow its SETUP.md exactly. Before you start, read SETUP.md's rules.
+
+If I need to sign in to GitHub, run gh auth login --web --git-protocol https in the background, read its output, and show me the one-time code in plain words so I can type it in the browser page.
 
 Ask me before anything that touches GitHub. Only look in ~/.claude, ~/Code and the vault folder.
