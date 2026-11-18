@@ -30,7 +30,7 @@ Run each check. Fix only what fails.
   - Otherwise, get the person's OK first: "I need to download the GitHub tool from GitHub's official releases. OK?" Downloading a release does not need a GitHub sign-in. Make a fresh temp folder with `mktemp -d`. Run `curl -s https://api.github.com/repos/cli/cli/releases/latest` and find the download link ending in `_macOS_universal.pkg` using grep and sed (no jq, no python), for example `grep -o 'https://[^"]*_macOS_universal.pkg' | head -1`. Download it into the temp folder with `curl -L -o`. Run `open "<pkg path>"` and tell the person: "An installer window opens. Click Continue, then Install, and enter your Mac password." Never use sudo. When it finishes, check `gh --version`, then delete the temp folder.
 - Sign-in: run `gh auth status`. If it fails, do this:
   1. Make a temp folder with `mktemp -d`. Call it `<tmp>`.
-  2. Run this as a background command, so the call does not block: `(echo | gh auth login --hostname github.com --web --git-protocol https) > "<tmp>/gh-login.log" 2>&1 &`
+  2. Start the login with your Bash tool's background option (run in background), not a plain `( ... ) &` that may be cleaned up when the call returns. The command is: `echo | gh auth login --hostname github.com --web --git-protocol https > "<tmp>/gh-login.log" 2>&1`
   3. Wait about 3 seconds, then read `<tmp>/gh-login.log`. It holds a one-time code that looks like `XXXX-XXXX`. Tell the person: "A browser page will open. Type this code: XXXX-XXXX, then click Authorize."
   4. If no code shows within 15 seconds, show the person the log in plain words and ask them what they see.
   5. Check `gh auth status` about every 10 seconds, for up to 5 minutes, until it succeeds.
@@ -41,12 +41,14 @@ Run each check. Fix only what fails.
 
 If `<home>/Code` does not exist, create it. Tell the person they have no apps there yet. If `<home>/Code/vault-starter` does not exist, run `gh repo clone hmficmarketing/vault-starter <home>/Code/vault-starter`. If it exists, run `git -C <home>/Code/vault-starter pull`.
 
+If the clone says the repo was not found, or could not resolve, the person has probably not accepted the GitHub invite yet. Ask them to open https://github.com/hmficmarketing/vault-starter/invitations in their browser and click Accept, then try the clone again.
+
 ## 3. Read what is already there
 
 Look at these, and only these:
 
 - `<home>/.claude/CLAUDE.md`, `<home>/.claude/settings.json`, `<home>/.claude/agents/`, and the names of the folders in `<home>/.claude/skills/`. Some may not exist. That is fine.
-- A listing of `<home>/Code`, or ask the person where their apps live.
+- A listing of `<home>/Code`, or ask the person where their apps live. If their apps live somewhere else, remember that folder and pass it as `--code-dir` in step 5.
 
 Tell the person what you found in 3 short lines. Example: "You have a few skills already, no settings changes, and 4 apps in Code. I will not touch any of it without a backup."
 
@@ -65,6 +67,8 @@ For question 5, do not search. Use what you already know about where macOS keeps
 - A path containing `;` cannot go in the list. Tell the person if one comes up.
 Show them the final list in plain words and get a yes. If they name nothing, the list stays empty. You will pass the list as `--privacy "path1;path2"`. The installer saves it to `<home>/.claude/vault-starter/privacy-folders.txt`, and the privacy guard blocks Claude from reading those folders.
 
+Also ask, only if their apps are not in `<home>/Code`: "Which folder holds your apps?" Pass it as `--code-dir "<folder>"`. Otherwise leave `--code-dir` out and the default `<home>/Code` is used.
+
 Before you build the command, remove any double quote characters from the name and app values.
 
 ## 5. Run the installer
@@ -79,6 +83,7 @@ All paths in it are absolute.
 
 - Leave out `--apps` if they have no apps.
 - Leave out `--privacy` if the list is empty.
+- Add `--code-dir "<folder>"` only if their apps live somewhere other than `<home>/Code`.
 - Add `--no-tiers` if `<home>/.claude/CLAUDE.md` exists and already mentions "tier 1" (any capitalization). It means they already have a tier system, and the kit should not add its own. Ignore any text between `<!-- vault-starter:begin -->` and `<!-- vault-starter:end -->`, because that is the kit's own block. If CLAUDE.md is missing, do not pass the flag.
 - Add `--git` if the person wants the vault to be a git repo (always add it if they said yes to backup in question 4).
 - The last line it prints is `vault-starter: installed`. If you do not see it, it did not finish.
@@ -94,7 +99,8 @@ All paths in it are absolute.
 1. Check `git -C "<vault>" log -1` shows a commit. If not, stop and tell the person.
 2. If the vault already has a remote (`git -C "<vault>" remote -v` prints something), stop and ask. Never push into an existing repo.
 3. Get their login from `gh api user --jq .login`. Run `gh repo view <login>/vault`. If it exists, the name is taken. Ask for another name, and never push into an existing repo.
-4. Tell the person: "Everything in the vault folder will be uploaded to a private repo that only you can see." Show this command, get a yes, then run it:
+4. Before the push, show the person what would go up: run `git -C "<vault>" ls-files | head -50` and `git -C "<vault>" ls-files | wc -l`. Show the list and the count, and ask: "Is there anything here that should stay off GitHub?" If yes, help them remove it from the vault's git (`git rm --cached`) and add it to `.gitignore`, then check again.
+5. Tell the person: "Everything in the vault folder will be uploaded to a private repo that only you can see." Show this command, get a yes, then run it:
 
 ```
 gh repo create <login>/<repo name> --private --source "<vault>" --push
@@ -139,8 +145,11 @@ Then tell the person: "Open Obsidian. Choose Open folder as vault. Pick the vaul
 When the person says "update my vault starter kit" (or step 0 sent you here):
 
 1. Run `git -C <home>/Code/vault-starter pull`.
-2. Read `<home>/.claude/vault-starter/answers.json`. Keys: `name`, `vault`, `apps` (a list, join it with ", " for `--apps`), `privacy`, `no_tiers` and `git` (true or false). If the vault folder is gone, ask the person what to do.
-3. If they want to change the private list, ask, then pass `--privacy` with the full new list. Otherwise pass no `--privacy` flag, so their list is kept.
+2. Read `<home>/.claude/vault-starter/answers.json`. Keys: `name`, `vault`, `apps` (a list, join it with ", " for `--apps`), `privacy`, `code_dir` (pass it as `--code-dir` if it is not `<home>/Code`), `no_tiers` and `git` (true or false). If the vault folder is gone, ask the person what to do.
+3. If they want to change the private list:
+   - To add a folder, confirm the full absolute path as in step 4, then pass `--privacy-add "<path1;path2>"`. It adds only the new folders and keeps the rest. Do not use `--privacy` for this: the privacy guard blocks any command that names a folder already on the list.
+   - To remove a folder, run `open -e "<home>/.claude/vault-starter/privacy-folders.txt"`. Tell the person to delete that folder's line in TextEdit and save. Never edit that file yourself. The installer reads it as the source of truth on the next run.
+   - Otherwise pass no privacy flag, so their list is kept.
 4. Re-run the installer with those values. Add `--no-tiers` if `no_tiers` is true and `--git` if `git` is true. Do not re-check for "tier 1" here, since the kit's own block would match.
 5. Look for lines that say `kept_user_edit` or "so I kept your version". Tell the person in plain words which files the kit left alone because they had changed them, and offer to show the difference for each one (compare the file with its `.kit-new` copy).
 6. Tell them to open a new chat in the Code tab of the Claude app and pick their folder, if hooks or skills changed.

@@ -18,8 +18,9 @@ Existing files are backed up first. If the person edited a file the kit manages,
 ## How to share it
 
 1. Add the person as a collaborator on the private repo `hmficmarketing/vault-starter`, using their GitHub username.
-2. Tell them to download Obsidian first.
-3. Send them `INSTALL-PROMPT.txt`. They paste it into Claude Code.
+2. Tell them to accept the GitHub invite email first. Until they do, the repo looks like it does not exist and the first clone fails.
+3. Tell them to download Obsidian.
+4. Send them `INSTALL-PROMPT.txt`. They paste it into Claude Code.
 
 Their Claude follows `SETUP.md` from there.
 
