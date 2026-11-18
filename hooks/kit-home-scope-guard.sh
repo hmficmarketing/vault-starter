@@ -24,7 +24,7 @@ def norm(tok):
 
 def is_broad(tok):
     t = norm(tok)
-    return t in BROAD or t in {"~/*", HOME + "/*", "/*", "/Users/*"}
+    return t in BROAD or t in {"~/*", HOME + "/*", "/*", "/Users/*"} or bool(re.fullmatch(r"/Users/[^/]+/?", t))
 
 try:
     data = json.loads(os.environ.get("HOOK_INPUT", "") or "{}")
@@ -50,9 +50,29 @@ SPLIT = r"\|\||&&|;|\||\n|\$\(|`|\(|\)"
 SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
 XARGS_VAL = {"-I", "-n", "-P", "-L", "-s", "-d", "-E", "-J", "-a"}
 
+CD_RE = re.compile(r"(^|[;&|\s])cd\s+(~/?|\$HOME/?|\$\{HOME\}/?|" + re.escape(HOME) + r"/?|/)(\s|;|&|$)")
+REC_RE = re.compile(r"(^|[;&|\s])(find\s+\.|grep\s+-[A-Za-z]*[rR]|rg\s|fd\s|ag\s|tree(\s|$)|du\s)")
+
+SHELLC_RE = re.compile(r"\b(bash|sh|zsh|dash|ksh)\s+-[A-Za-z]*c\s+(['\"])(.*?)\2")
+
+def xargs_recursive(prog, args):
+    if prog in ("find", "rg", "fd", "fdfind", "ag", "ack", "tree", "du", "locate"):
+        return True
+    if prog == "mdfind":
+        return "-onlyin" not in args
+    if prog in ("grep", "egrep", "fgrep"):
+        return any((a.startswith("-") and not a.startswith("--") and ("r" in a or "R" in a)) or a == "--recursive" for a in args)
+    return False
+
 def check(cmd, depth=0):
     if depth > 4:
         return
+    if CD_RE.search(cmd) and REC_RE.search(cmd):
+        block()
+    for m in SHELLC_RE.finditer(cmd):
+        check(m.group(3), depth + 1)
+    xsearch = False
+    broad_seen = False
     for part in re.split(SPLIT, cmd):
         try:
             toks = shlex.split(part, posix=True)
@@ -64,7 +84,8 @@ def check(cmd, depth=0):
             toks = toks[1:]
             if toks and re.match(r"^\d+[smh]?$", toks[0]):
                 toks = toks[1:]
-        if toks and os.path.basename(toks[0]) == "xargs":
+        is_xargs = bool(toks) and os.path.basename(toks[0]) == "xargs"
+        if is_xargs:
             toks = toks[1:]
             while toks and toks[0].startswith("-"):
                 flag = toks[0]
@@ -75,6 +96,11 @@ def check(cmd, depth=0):
             continue
         prog = os.path.basename(toks[0])
         args = toks[1:]
+        if is_xargs:
+            if xargs_recursive(prog, args):
+                xsearch = True
+        elif any(is_broad(a) for a in toks[1:]):
+            broad_seen = True
         if prog in SHELLS:
             for i, a in enumerate(args):
                 if re.match(r"^-[A-Za-z]*c$", a) and i + 1 < len(args):
@@ -91,11 +117,9 @@ def check(cmd, depth=0):
             block()
         if prog in SEARCHERS and any(is_broad(a) for a in args):
             block()
+    if xsearch and broad_seen:
+        block()
 
 check(cmd)
-
-if re.search(r"(^|[;&|\s])cd\s+(~/?|\$HOME/?|\$\{HOME\}/?|" + re.escape(HOME) + r"/?|/)(\s|;|&|$)", cmd) and \
-   re.search(r"(^|[;&|\s])(find\s+\.|grep\s+-[A-Za-z]*[rR]|rg\s|fd\s|ag\s|tree(\s|$)|du\s)", cmd):
-    block()
 sys.exit(0)
 PY

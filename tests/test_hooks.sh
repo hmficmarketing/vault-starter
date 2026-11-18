@@ -70,4 +70,10 @@ for hk in kit-home-scope-guard.sh kit-privacy-guard.sh; do
   assert_eq "$?" "2" "test_no_python_blocks $hk"
 done
 
+# --- fix round 2 ---
+expect test_xargs_pipe_echo_home $H '{"tool_name":"Bash","tool_input":{"command":"echo ~ | xargs grep -r foo"}}' 2
+expect test_xargs_pipe_users_name $H '{"tool_name":"Bash","tool_input":{"command":"echo /Users/someone | xargs find -name x"}}' 2
+expect test_bash_c_cd_then_search $H '{"tool_name":"Bash","tool_input":{"command":"bash -c \"cd ~ && grep -r x .\""}}' 2
+expect test_xargs_scoped_pipe_ok $H '{"tool_name":"Bash","tool_input":{"command":"ls ~/Code | xargs grep -l foo"}}' 0
+
 finish_tests
