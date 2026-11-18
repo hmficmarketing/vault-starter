@@ -132,7 +132,7 @@ Show the person the real output of each, not a summary.
 
 If any check fails, say so plainly and show the output. Do not call setup done.
 
-Then tell the person: "Open a new chat in the Code tab of the Claude app and pick your folder, so the new skills and guards load."
+Then tell the person: "From now on, start your chats in the Code tab of the Claude app with your vault folder (<vault>) picked. Claude keeps a separate memory for each folder, and only the vault folder's memory saves into your vault. You can still work on your apps from there. Open a new chat that way now, so the new skills and guards load."
 
 ## 8. Tell them how to open it
 
@@ -152,4 +152,4 @@ When the person says "update my vault starter kit" (or step 0 sent you here):
    - Otherwise pass no privacy flag, so their list is kept.
 4. Re-run the installer with those values. Add `--no-tiers` if `no_tiers` is true and `--git` if `git` is true. Do not re-check for "tier 1" here, since the kit's own block would match.
 5. Look for lines that say `kept_user_edit` or "so I kept your version". Tell the person in plain words which files the kit left alone because they had changed them, and offer to show the difference for each one (compare the file with its `.kit-new` copy).
-6. Tell them to open a new chat in the Code tab of the Claude app and pick their folder, if hooks or skills changed.
+6. Tell them to open a new chat in the Code tab of the Claude app with their vault folder picked, if hooks or skills changed.
