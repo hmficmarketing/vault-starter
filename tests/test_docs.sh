@@ -28,7 +28,7 @@ if grep -q 'privacy-folders\|--privacy' "$ROOT/SETUP.md"; then _pass; else _fail
 assert_contains "$ROOT/SETUP.md" "new chat"
 assert_contains "$ROOT/SETUP.md" "gh auth setup-git"
 assert_contains "$ROOT/SETUP.md" "one-time code"
-assert_contains "$ROOT/INSTALL-PROMPT.txt" "one-time code"
+assert_contains "$ROOT/INSTALL-PROMPT.txt" "git clone"
 assert_contains "$ROOT/SETUP.md" "_macOS_universal.pkg"
 assert_contains "$ROOT/SETUP.md" "answers.json exists AND"
 assert_contains "$ROOT/SETUP.md" 'test -e'
@@ -37,13 +37,16 @@ assert_contains "$ROOT/SETUP.md" "Obsidian.app"
 assert_not_contains "$ROOT/SETUP.md" "ls -d"
 assert_not_contains "$ROOT/INSTALL-PROMPT.txt" "~"
 assert_not_contains "$ROOT/SETUP.md" '"~/'
-assert_contains "$ROOT/SETUP.md" "https://github.com/hmficmarketing/vault-starter/invitations"
+assert_contains "$ROOT/SETUP.md" "https://github.com/hmficmarketing/vault-starter.git"
+assert_contains "$ROOT/SETUP.md" "Get to know them"
+assert_contains "$ROOT/SETUP.md" "what do you know about me"
 assert_contains "$ROOT/SETUP.md" "run in background"
 assert_contains "$ROOT/SETUP.md" 'ls-files | head -50'
 assert_contains "$ROOT/SETUP.md" 'open -e'
 assert_contains "$ROOT/SETUP.md" "Never edit that file yourself"
-assert_contains "$ROOT/README.md" "accept the GitHub invite"
-assert_contains "$ROOT/INSTALL-PROMPT.txt" "Accept the GitHub invite first."
+assert_contains "$ROOT/README.md" "no GitHub account"
+assert_not_contains "$ROOT/INSTALL-PROMPT.txt" "invite"
+assert_not_contains "$ROOT/SETUP.md" "gh repo clone"
 assert_contains "$ROOT/skills/kit-new-project/SKILL.md" "code_dir"
 assert_contains "$ROOT/skills/kit-new-project/SKILL.md" 'add a bullet'
 finish_tests

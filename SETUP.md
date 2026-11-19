@@ -6,7 +6,7 @@ These instructions are for Claude. The person you are helping is on a Mac, uses 
 
 - Only look in `~/.claude`, `~/Code` (or the folder where the person says their apps live), and the vault folder. Never search the whole home folder or the whole disk. Do not run `mdfind`, a recursive grep over the home folder, or a recursive find over it.
 - If you cannot find something in a known place, ask the person. Do not hunt for it.
-- GitHub. The person's install prompt already approves: signing in, cloning or pulling the kit, and reading their GitHub username. Ask first for everything else that touches GitHub: downloading an installer, creating a repo, pushing, or anything that changes their GitHub.
+- GitHub. The kit is public, so getting it needs no GitHub account. The person's install prompt already approves cloning or pulling the kit. GitHub is only needed if they want their vault backed up (step 6). Ask first for everything that touches their GitHub: downloading the GitHub tool, signing in, creating a repo, pushing.
 - Never print secrets, tokens, or passwords.
 - Back up before touching an existing file. The installer does this for you. If you edit anything by hand, copy it to `<name>.bak` first.
 - Never edit around an installer refusal. See step 5.
@@ -14,34 +14,23 @@ These instructions are for Claude. The person you are helping is on a Mac, uses 
 - If a Mac pop-up appears that is not listed here, read it to the person and ask what they want to click.
 - Plain words. The installer's "guards" are two small safety checks. One stops Claude from searching the whole computer. The other stops Claude from opening the private folders the person lists. Say it that way.
 
-The only clicks the person should need are: downloading Obsidian (they may have done this already), the Xcode tools "Install" button if it appears, the GitHub installer window if you had to download it (Continue, Install, Mac password), and the GitHub sign-in in the browser.
+The only clicks the person should need are: downloading Obsidian (they may have done this already) and the Xcode tools "Install" button if it appears. If they want a GitHub backup, add the GitHub installer window if you had to download it (Continue, Install, Mac password) and the GitHub sign-in in the browser.
 
 ## 0. First run or update?
 
-Read `<home>/.claude/vault-starter/answers.json` if it exists. It is an update only if answers.json exists AND the vault folder it names (the `vault` key) still exists. If so, go straight to step 9. If answers.json exists but the vault folder is gone, or you are unsure, ask the person what they want. Otherwise this is a first run. Go to step 1.
+Read `<home>/.claude/vault-starter/answers.json` if it exists. It is an update only if answers.json exists AND the vault folder it names (the `vault` key) still exists. If so, go straight to step 10. If answers.json exists but the vault folder is gone, or you are unsure, ask the person what they want. Otherwise this is a first run. Go to step 1.
 
-## 1. Check the tools
+## 1. Check git
 
-Run each check. Fix only what fails.
+Run this check. Fix it only if it fails.
 
 - git: run `git --version`. On a fresh Mac this itself can pop up the Xcode tools installer. If that pop-up appeared, do not run `xcode-select --install`. Tell the person: "A box popped up. Click Install and wait for it to finish. Tell me when it is done." Then check again. If they closed the box, run `xcode-select --install` once and say the same.
-- gh: run `gh --version`. If it fails:
-  - If `brew --version` works, run `brew install gh`.
-  - Otherwise, get the person's OK first: "I need to download the GitHub tool from GitHub's official releases. OK?" Downloading a release does not need a GitHub sign-in. Make a fresh temp folder with `mktemp -d`. Run `curl -s https://api.github.com/repos/cli/cli/releases/latest` and find the download link ending in `_macOS_universal.pkg` using grep and sed (no jq, no python), for example `grep -o 'https://[^"]*_macOS_universal.pkg' | head -1`. Download it into the temp folder with `curl -L -o`. Run `open "<pkg path>"` and tell the person: "An installer window opens. Click Continue, then Install, and enter your Mac password." Never use sudo. When it finishes, check `gh --version`, then delete the temp folder.
-- Sign-in: run `gh auth status`. If it fails, do this:
-  1. Make a temp folder with `mktemp -d`. Call it `<tmp>`.
-  2. Start the login with your Bash tool's background option (run in background), not a plain `( ... ) &` that may be cleaned up when the call returns. The command is: `echo | gh auth login --hostname github.com --web --git-protocol https > "<tmp>/gh-login.log" 2>&1`
-  3. Wait about 3 seconds, then read `<tmp>/gh-login.log`. It holds a one-time code that looks like `XXXX-XXXX`. Tell the person: "A browser page will open. Type this code: XXXX-XXXX, then click Authorize."
-  4. If no code shows within 15 seconds, show the person the log in plain words and ask them what they see.
-  5. Check `gh auth status` about every 10 seconds, for up to 5 minutes, until it succeeds.
-  6. Run `gh auth setup-git`, so plain git pulls on the private repo work.
-  7. Delete the temp folder.
 
 ## 2. Get the kit
 
-If `<home>/Code` does not exist, create it. Tell the person they have no apps there yet. If `<home>/Code/vault-starter` does not exist, run `gh repo clone hmficmarketing/vault-starter <home>/Code/vault-starter`. If it exists, run `git -C <home>/Code/vault-starter pull`.
+If `<home>/Code` does not exist, create it. Tell the person they have no apps there yet. If `<home>/Code/vault-starter` does not exist, run `git clone https://github.com/hmficmarketing/vault-starter.git <home>/Code/vault-starter`. If it exists, run `git -C <home>/Code/vault-starter pull`. No GitHub sign-in is needed.
 
-If the clone says the repo was not found, or could not resolve, the person has probably not accepted the GitHub invite yet. Ask them to open https://github.com/hmficmarketing/vault-starter/invitations in their browser and click Accept, then try the clone again.
+If the clone fails, show the person the error in plain words. Do not try other ways to get the kit.
 
 ## 3. Read what is already there
 
@@ -96,6 +85,22 @@ All paths in it are absolute.
 
 ## 6. Back up to GitHub (only if they said yes)
 
+First set up the GitHub tool, only now that they asked for a backup. Fix only what fails:
+
+- gh: run `gh --version`. If it fails:
+  - If `brew --version` works, run `brew install gh`.
+  - Otherwise, get the person's OK first: "I need to download the GitHub tool from GitHub's official releases. OK?" Downloading a release does not need a GitHub sign-in. Make a fresh temp folder with `mktemp -d`. Run `curl -s https://api.github.com/repos/cli/cli/releases/latest` and find the download link ending in `_macOS_universal.pkg` using grep and sed (no jq, no python), for example `grep -o 'https://[^"]*_macOS_universal.pkg' | head -1`. Download it into the temp folder with `curl -L -o`. Run `open "<pkg path>"` and tell the person: "An installer window opens. Click Continue, then Install, and enter your Mac password." Never use sudo. When it finishes, check `gh --version`, then delete the temp folder.
+- Sign-in: run `gh auth status`. If it fails, do this:
+  1. Make a temp folder with `mktemp -d`. Call it `<tmp>`.
+  2. Start the login with your Bash tool's background option (run in background), not a plain `( ... ) &` that may be cleaned up when the call returns. The command is: `echo | gh auth login --hostname github.com --web --git-protocol https > "<tmp>/gh-login.log" 2>&1`
+  3. Wait about 3 seconds, then read `<tmp>/gh-login.log`. It holds a one-time code that looks like `XXXX-XXXX`. Tell the person: "A browser page will open. Type this code: XXXX-XXXX, then click Authorize."
+  4. If no code shows within 15 seconds, show the person the log in plain words and ask them what they see.
+  5. Check `gh auth status` about every 10 seconds, for up to 5 minutes, until it succeeds.
+  6. Run `gh auth setup-git`, so plain git pulls on the private repo work.
+  7. Delete the temp folder.
+
+Then:
+
 1. Check `git -C "<vault>" log -1` shows a commit. If not, stop and tell the person.
 2. If the vault already has a remote (`git -C "<vault>" remote -v` prints something), stop and ask. Never push into an existing repo.
 3. Get their login from `gh api user --jq .login`. Run `gh repo view <login>/vault`. If it exists, the name is taken. Ask for another name, and never push into an existing repo.
@@ -132,15 +137,47 @@ Show the person the real output of each, not a summary.
 
 If any check fails, say so plainly and show the output. Do not call setup done.
 
-Then tell the person: "From now on, start your chats in the Code tab of the Claude app with your vault folder (<vault>) picked. Claude keeps a separate memory for each folder, and only the vault folder's memory saves into your vault. You can still work on your apps from there. Open a new chat that way now, so the new skills and guards load."
+## 8. Get to know them
 
-## 8. Tell them how to open it
+The vault is empty until it knows the person. Fill it now, so their first new chat already knows them.
+
+1. **Their apps.** For each app they named in question 3 that has a folder in the code folder, read only its `README.md` (if there is one) and `git -C "<app folder>" log --oneline -10` (if it is a git repo). Do not read anything else in the app. Copy `<vault>/Templates/Project.md` to `<vault>/Projects/<App>/<App>.md`, unless that file already exists. Replace `{{date}}` with today's date and `{{title}}` with the app name. Fill in, in 1 to 3 lines each: what it is, where it stands, and what looks next. Add `App folder: <folder>`. Never write secrets, keys or customer data into a note. Never change anything inside the app folder.
+2. **Them.** Tell the person: "Last part. 5 quick questions so Claude knows you from day one." Ask one at a time:
+   1. What do you do, and who do you do it for?
+   2. What are you working toward over the next 3 months?
+   3. How do you like Claude to talk to you? (Short and blunt, step by step, something else?)
+   4. What should Claude always check with you before doing?
+   5. Anything else Claude should always remember about you?
+3. **Save it to memory.** Write each answer as its own file in `<vault>/.claude/memory/`, named like `user-role.md`, `user-goals.md`, `user-style.md`, `user-ask-first.md`, `user-notes.md`. Skip a question they left blank. Each file has this frontmatter, then the fact in their words:
+
+   ```
+   ---
+   name: user-role
+   description: <one line>
+   metadata:
+     type: user
+   ---
+   ```
+
+   Then write `<vault>/.claude/memory/MEMORY.md` with one line per file: `- [Title](file.md) - one-line hook`. If MEMORY.md already exists, add lines and keep what is there.
+4. If the vault is a git repo, commit: `git -C "<vault>" add -A && git -C "<vault>" commit -m "Get to know me"`. If it has a remote, push.
+5. Tell the person in 3 short lines what you saved.
+
+## 9. Open it and prove it remembers
 
 Check `test -d /Applications/Obsidian.app`. If it is missing, tell the person to download Obsidian from obsidian.md, and wait until they say it is installed.
 
-Then tell the person: "Open Obsidian. Choose Open folder as vault. Pick the vault folder. Then read the note called How to use this vault."
+Then tell the person:
 
-## 9. Updates
+"Two last things.
+
+1. Open Obsidian. Choose Open folder as vault, pick your vault folder, and read the note called How to use this vault.
+
+2. From now on, start your chats in the Code tab of the Claude app with your vault folder (<vault>) picked. Claude keeps a separate memory for each folder, and only the vault folder's memory saves into your vault. You can still work on your apps from there. Try it now: open a new chat that way and ask "what do you know about me?" It should answer from what you just told me. That is how you know it works."
+
+Setup is done when you have said this.
+
+## 10. Updates
 
 When the person says "update my vault starter kit" (or step 0 sent you here):
 

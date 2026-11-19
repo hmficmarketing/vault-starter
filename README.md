@@ -1,6 +1,6 @@
 # Vault Starter Kit
 
-A private kit that sets up a personal knowledge vault (Obsidian) and a safe Claude Code setup on someone's Mac. The person pastes one prompt into Claude Code, and their Claude does the rest: tools, vault, skills, and guards.
+A kit that sets up a personal knowledge vault (Obsidian) and a safe Claude Code setup on someone's Mac. The person pastes one prompt into Claude Code, and their Claude does the rest: tools, vault, skills, and guards.
 
 It is built for people who use the Claude desktop app and never touch the terminal.
 
@@ -17,12 +17,10 @@ Existing files are backed up first. If the person edited a file the kit manages,
 
 ## How to share it
 
-1. Add the person as a collaborator on the private repo `hmficmarketing/vault-starter`, using their GitHub username.
-2. Tell them to accept the GitHub invite email first. Until they do, the repo looks like it does not exist and the first clone fails.
-3. Tell them to download Obsidian.
-4. Send them `INSTALL-PROMPT.txt`. They paste it into Claude Code.
+1. Tell them to download Obsidian from obsidian.md.
+2. Send them `INSTALL-PROMPT.txt`. They paste it into a new chat in the Code tab of the Claude app.
 
-Their Claude follows `SETUP.md` from there.
+The repo is public, so they need no GitHub account. Their Claude follows `SETUP.md` from there: it installs the kit, asks a few questions, fills the vault with their apps and what they told it, and finishes by having them open a chat in the vault folder to check it remembers them.
 
 ## How to update it
 
