@@ -28,7 +28,7 @@ Run this check. Fix it only if it fails.
 
 ## 2. Get the kit
 
-If `<home>/Code` does not exist, create it. Tell the person they have no apps there yet. If `<home>/Code/vault-starter` does not exist, run `git clone https://github.com/hmficmarketing/vault-starter.git <home>/Code/vault-starter`. If it exists, run `git -C <home>/Code/vault-starter pull`. No GitHub sign-in is needed.
+If `<home>/Code` does not exist, create it. Tell the person they have no apps there yet. If `<home>/Code/vault-starter` does not exist, run `git clone https://github.com/hmficmarketing/vault-starter.git <home>/Code/vault-starter`. If it exists, run `git -C <home>/Code/vault-starter fetch origin` then `git -C <home>/Code/vault-starter reset --hard origin/main`. The person never edits files in the kit folder, so this is safe, and it works even if the kit's history changed. No GitHub sign-in is needed.
 
 If the clone fails, show the person the error in plain words. Do not try other ways to get the kit.
 
@@ -181,7 +181,7 @@ Setup is done when you have said this.
 
 When the person says "update my vault starter kit" (or step 0 sent you here):
 
-1. Run `git -C <home>/Code/vault-starter pull`.
+1. Run `git -C <home>/Code/vault-starter fetch origin` then `git -C <home>/Code/vault-starter reset --hard origin/main`.
 2. Read `<home>/.claude/vault-starter/answers.json`. Keys: `name`, `vault`, `apps` (a list, join it with ", " for `--apps`), `privacy`, `code_dir` (pass it as `--code-dir` if it is not `<home>/Code`), `no_tiers` and `git` (true or false). If the vault folder is gone, ask the person what to do.
 3. If they want to change the private list:
    - To add a folder, confirm the full absolute path as in step 4, then pass `--privacy-add "<path1;path2>"`. It adds only the new folders and keeps the rest. Do not use `--privacy` for this: the privacy guard blocks any command that names a folder already on the list.
