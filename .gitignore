@@ -4,3 +4,6 @@
 .DS_Store
 __pycache__/
 *.pyc
+
+# Local Obsidian state from opening this repo as a vault (the template keeps its own)
+/.obsidian/
