@@ -22,8 +22,8 @@ done
 assert_contains "$V/.obsidian/daily-notes.json" '"Daily Notes"'
 assert_contains "$V/.obsidian/daily-notes.json" '"Templates/Daily"'
 assert_contains "$V/.obsidian/templates.json" '"Templates"'
-for p in daily-notes templates file-explorer search backlinks graph; do
-  assert_contains "$V/.obsidian/core-plugins.json" "\"$p\""
+for p in daily-notes templates file-explorer global-search backlink graph; do
+  assert_contains "$V/.obsidian/core-plugins.json" "\"$p\": true"
 done
 for p in '.obsidian/workspace*.json' '.trash/' '.DS_Store'; do
   assert_contains "$V/.gitignore" "$p"
